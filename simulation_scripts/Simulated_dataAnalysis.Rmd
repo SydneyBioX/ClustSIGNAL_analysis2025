@@ -1,0 +1,1202 @@
+---
+title: "Simulated spatial transcriptomics data generation and analysis"
+author: "Pratibha Panwar"
+date: "2025-09-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r}
+library(zellkonverter)
+library(Seurat)
+library(SingleCellExperiment)
+
+library(dplyr)
+library(scater)
+library(scran)
+library(pheatmap)
+
+library(SpatialExperiment)
+library(stringr)
+
+library(BiocNeighbors)
+library(scuttle)
+library(reshape2)
+library(Matrix)
+library(bluster)
+
+library(clustSIGNAL)
+library(aricode)
+
+library(mbkmeans)
+library(igraph)
+library(tidyr)
+```
+
+# Colors for visualisations
+
+```{r}
+colors <-c("CellType1" = "#635547", "CellType2" = "#139992", 
+           "CellType3" = "#C72228", "CellType4" = "#C9EBFB", 
+           "CellType5" = "#FACB12", "CellType6" = "#65A83E", 
+           "CellType7" = "#532C8A", "CellType8" = "#ff891c", 
+           "CellType9" = "#F6BFCB")
+
+methodColors <- c("#0F4A9C", "#139992", "#EF4E22", "#E1C239")
+
+allColors <- c("#635547", "#139992", "#C72228", "#C9EBFB", "#FACB12", "#65A83E",
+               "#532C8A", "#ff891c", "#F6BFCB", "#C594BF", "#DFCDE4", "#8EC792", 
+               "#9DD84A", "#8DB5CE", "#005579", "#3F84AA", "#B51D8D", "#0F4A9C", 
+               "#8870ad", "#cc7818", "#FBBE92", "#EF4E22", "#f9decf", "#c9a997", 
+               "#C72228", "#f79083", "#F397C0", "#DABE99", "#c19f70", "#354E23", 
+               "#C3C388", "#647a4f", "#CDE088", "#f7f79e", "#EF5A9D", "#7F6874", 
+               "#989898", "#1A1A1A", "#FFFFFF", "#e6e6e6", "#77441B", "#F90026", 
+               "#A10037", "#DA5921", "#E1C239")
+```
+
+# Reference gene expression
+
+Single cell gene expression - human cell atlas downloaded from [CellxGene](https://cellxgene.cziscience.com/collections/e5f58829-1a66-40b5-a624-9046778e74f5).
+
+```{r}
+#### Converting seurat objects to sce objects ####
+
+dataPath <- "./datasets/TabulaSapiens/" # path to downloaded data
+
+# lymph node cells
+seu_lnode <- readRDS(paste0(dataPath, "seuTS_lymph_node.rds"))
+sce_lnode <- as.SingleCellExperiment(seu_lnode)
+rm(seu_lnode)
+
+# eye cells
+seu_eye <- readRDS(paste0(dataPath, "seuTS_eye.rds"))
+sce_eye <- as.SingleCellExperiment(seu_eye)
+rm(seu_eye)
+
+# kidney cells
+seu_kid <- readRDS(paste0(dataPath, "seuTS_kidney.rds"))
+sce_kid <- as.SingleCellExperiment(seu_kid)
+rm(seu_kid)
+
+# liver cells
+seu_liv <- readRDS(paste0(dataPath, "seuTS_liver.rds"))
+sce_liv <- as.SingleCellExperiment(seu_liv)
+rm(seu_liv)
+
+# muscle cells
+seu_mus <- readRDS(paste0(dataPath, "seuTS_muscle.rds"))
+sce_mus <- as.SingleCellExperiment(seu_mus)
+rm(seu_mus)
+
+# combined data
+sce <- cbind(sce_lnode, sce_eye, sce_kid, sce_liv, sce_mus)
+rm(sce_lnode, sce_eye, sce_kid, sce_liv, sce_mus)
+gc()
+```
+
+```{r}
+#### Selecting specific cell types ####
+
+# Note that "UMAP" and "UMAP_TISSUE_SCVI_DONORASSAY" are the same
+# Note that "UMAP_SCVI_FULL_DONORASSAY" is an atlas level UMAP of all tissues
+# The cell types below were selected based on data exploration on CellxGene
+# To avoid batch effects, specific cells of a celltype were taken from only
+# one donor and one assay ("10x 3' v3") - see combinations below:
+# donor TSP14 - "plasma cell", "B cell", "neutrophil", "hepatocyte", 
+# "mesenchymal stem cell", "skeletal muscle satellite stem cell"
+# donor TSP2 - "kidney epithelial cell"
+# donor TSP21 - "conjunctival epithelial cell", "corneal epithelial cell", 
+# "retinal blood vessel endothelial cell"
+tsp14_ct <- c("plasma cell", "B cell", "hepatocyte", "mesenchymal stem cell", 
+              "skeletal muscle satellite stem cell") # celltypes from donor TSP14
+tsp2_ct <- c("kidney epithelial cell") # celltypes from donor TSP2
+tsp21_ct <- c("conjunctival epithelial cell", "corneal epithelial cell", 
+              "retinal blood vessel endothelial cell") # celltypes from donor TSP21
+
+# combining data for cell types from specific donors
+sce_sub <- sce[, (sce$cell_type %in% tsp14_ct & sce$donor_id == "TSP14") |
+                   (sce$cell_type %in% tsp2_ct & sce$donor_id == "TSP2") | 
+                   (sce$cell_type %in% tsp21_ct & sce$donor_id == "TSP21")]
+# taking data from only one assay type to minimize batch effects
+sce_sub <- sce_sub[, sce_sub$assay == "10x 3' v3"] 
+sce_sub$cell_type <- factor(sce_sub$cell_type)
+sce_sub$donor_id <- factor(sce_sub$donor_id)
+sce_sub$assay <- factor(sce_sub$assay)
+```
+
+```{r}
+#### Creating sce object containing gene expression ####
+
+# creating new sce object
+sce_new <- SingleCellExperiment(assays = list(counts = counts(sce_sub)),
+                                colData = as.data.frame(colData(sce_sub)))
+set.seed(123)
+sce_new <- logNormCounts(sce_new) # log normalise gene count 
+sce_new <- runPCA(sce_new) # run pca
+sce_new <- runUMAP(sce_new) # run umap
+plotReducedDim(sce_new, dimred = "UMAP", colour_by = "cell_type", 
+               scattermore = TRUE) # to check for any prominent batch effects
+
+# selecting top 3000 hvgs to reduce number of features
+set.seed(123)
+stat <- modelGeneVar(sce_new)
+hvgs <- getTopHVGs(stat, n = 3000)
+sce_hvg <- sce_new[hvgs,]
+# pre-processing updated sce object
+sce_hvg <- logNormCounts(sce_hvg)
+sce_hvg <- runPCA(sce_hvg)
+sce_hvg <- runUMAP(sce_hvg)
+saveRDS(sce_hvg, file = "./data_outputs/simDataOut/sce_simExp.Rds")
+```
+
+```{r}
+#### Assessing reference gene expression characteristics ####
+
+# summed gene counts
+sce_aggreg <- aggregateAcrossCells(sce_hvg, ids = sce_hvg$cell_type, 
+                                   use.assay.type = "counts")
+# summed gene logcounts
+sce_aggreg_log <- aggregateAcrossCells(sce_hvg, ids = sce_hvg$cell_type, 
+                                       use.assay.type = "logcounts")
+gene_counts_avg <- counts(sce_aggreg)
+scaled_data <- t(scale(t(gene_counts_avg)))
+pheatmap(scaled_data, cluster_rows = TRUE, cluster_cols = TRUE, 
+         main = "Gene Expression by Cell Type")
+```
+
+
+# Spatial data simulations
+
+Spatial data generated for four patterns - Patched, Gradient, Complex, Uniform.
+
+```{r}
+# loading functions for label allocation to spatial coordinates
+source("./simulation_scripts/simulation_functions.R") 
+```
+
+```{r}
+# Simulation parameters
+n_c <- 5500 # Total number of cells
+celltype_data <- sce_hvg$cell_type |> unique() |> as.character() # celltype labels
+
+# Generation coordinates
+set.seed(123)
+coords <- data.frame(x = runif(n_c, min = 0, max = 300),
+                     y = runif(n_c, min = 0, max = 300))
+sp_center <- c(150, 150) # centre of x-y coordinates
+```
+
+## Patched spe
+
+```{r}
+#### allocating labels (CellType1-9) to coordinates ####
+
+cell_typeP <- data.frame(CellType = sim_patch(coords), coords) %>%
+    arrange(CellType) # data frame of coordinates and their labels
+celltypeP_combs <- as.data.frame(table(cell_typeP$CellType)) # cell number / label
+```
+
+```{r}
+#### allocating gene expression to each coordinate based on label ####
+
+# Celltype_design
+# "CellType1" = "B cell",
+# "CellType2" = "B cell", "plasma cell",
+# "CellType3" = "plasma cell",
+# "CellType4" = "B cell", "conjunctival epithelial cell"
+# "CellType5" = "retinal blood vessel endothelial cell"
+# "CellType6" = "plasma cell", "corneal epithelial cell"
+# "CellType7" = "conjunctival epithelial cell"
+# "CellType8" = "conjunctival epithelial cell", "corneal epithelial cell"
+# "CellType9" = "corneal epithelial cell"
+
+set.seed(123)
+gene_expP <- apply(celltypeP_combs, 1, function(x){
+    if (x[1] == "CellType1") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                          as.numeric(x[2])) 
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType2") {
+        cell_id1 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                           as.numeric(x[2]))
+        cell_id2 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                           as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType3") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType4") {
+        cell_id1 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                           as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType5") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "retinal blood vessel endothelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType6") {
+        cell_id1 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                           as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType7") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType8") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType9") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } 
+    return(exp)
+})
+
+gene_expP <- do.call(cbind, gene_expP) # combine gene expression of all cell types
+colnames(gene_expP) <- paste0("p_Cell", c(1:ncol(gene_expP)))
+rownames(gene_expP) <- paste0("Gene", c(1:nrow(gene_expP)))
+# cell id and cell label metadata
+cell_typeP <- cbind(CellID = colnames(gene_expP), cell_typeP) 
+```
+
+```{r}
+#### creating SpatialExperiment object for Patched ####
+
+speP <- SpatialExperiment(assays = list(counts = gene_expP), 
+                          colData = cell_typeP, 
+                          spatialCoordsNames = c("x", "y"))
+reducedDim(speP, "spatial") <- spatialCoords(speP)
+speP$Pattern <- "Patched"
+speP$CellType <- factor(speP$CellType)
+levels(speP$CellType) <- str_split_i(levels(speP$CellType), pattern = "Type", 2)
+
+set.seed(123)
+speP <- logNormCounts(speP)
+speP <- runPCA(speP)
+speP <- runUMAP(speP)
+speP
+saveRDS(speP, file = "./data_outputs/simDataOut/speP.Rds")
+```
+
+## Gradient spe
+
+```{r}
+#### allocating labels (CellType1-14) to coordinates ####
+
+cell_typeG <- data.frame(CellType = sim_gradient(coords), coords) %>%
+    arrange(CellType) # data frame of coordinates and their labels
+celltypeG_combs <- as.data.frame(table(cell_typeG$CellType)) # cell number / label
+```
+
+```{r}
+#### allocating gene expression to each coordinate based on label ####
+
+# Celltype_design
+# "CellType1" = "B cell"
+# "CellType2" = "B cell", "plasma cell"
+# "CellType3" = "plasma cell"
+# "CellType4" = "plasma cell", "conjunctival epithelial cell"
+# "CellType5" = "conjunctival epithelial cell"
+# "CellType6" = "corneal epithelial cell"
+# "CellType7" = "retinal blood vessel endothelial cell"
+# "CellType8" = "retinal blood vessel endothelial cell", "kidney epithelial cell"
+# "CellType9" = "kidney epithelial cell"
+# "CellType10" = "hepatocyte"
+# "CellType11" = "hepatocyte", "mesenchymal stem cell"
+# "CellType12" = "mesenchymal stem cell"
+# "CellType13" = "mesenchymal stem cell", "skeletal muscle satellite stem cell"
+# "CellType14" = "skeletal muscle satellite stem cell"
+
+set.seed(123)
+gene_expG <- apply(celltypeG_combs, 1, function(x){
+    if (x[1] == "CellType1") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType2") {
+        cell_id1 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                           as.numeric(x[2]))
+        cell_id2 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                           as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType3") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType4") {
+        cell_id1 <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                           as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType5") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType6") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType7") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "retinal blood vessel endothelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType8") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "retinal blood vessel endothelial cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "kidney epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType9") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "kidney epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType10") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "hepatocyte"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType11") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "hepatocyte"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType12") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType13") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "skeletal muscle satellite stem cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType14") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "skeletal muscle satellite stem cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    }
+    return(exp)
+})
+
+gene_expG <- do.call(cbind, gene_expG) # combine gene expression of all cell types
+colnames(gene_expG) <- paste0("g_Cell", c(1:ncol(gene_expG)))
+rownames(gene_expG) <- paste0("Gene", c(1:nrow(gene_expG)))
+# cell id and cell label metadata
+cell_typeG <- cbind(CellID = colnames(gene_expG), cell_typeG)
+```
+
+```{r}
+#### creating SpatialExperiment object for Gradient ####
+
+speG <- SpatialExperiment(assays = list(counts = gene_expG), 
+                          colData = cell_typeG, 
+                          spatialCoordsNames = c("x", "y"))
+reducedDim(speG, "spatial") <- spatialCoords(speG)
+speG$Pattern <- "Gradient"
+speG$CellType <- factor(speG$CellType, levels = paste0("CellType", seq_len(14)))
+levels(speG$CellType) <- str_split_i(levels(speG$CellType), pattern = "Type", 2)
+
+set.seed(123)
+speG <- logNormCounts(speG)
+speG <- runPCA(speG)
+speG <- runUMAP(speG)
+speG
+saveRDS(speG, file = "./data_outputs/simDataOut/speG.Rds")
+```
+
+## Complex spe
+
+```{r}
+#### allocating labels (CellType1-12) to coordinates ####
+
+cell_typeC <- data.frame(CellType = sim_complex(coords, sp_center), coords) %>%
+    arrange(CellType) # data frame of coordinates and their labels
+celltypeC_combs <- as.data.frame(table(cell_typeC$CellType)) # cell number / label
+```
+
+```{r}
+#### allocating gene expression to each coordinate based on label ####
+
+# Celltype_design
+# "CellType1" = "B cell"
+# "CellType2" = "plasma cell"
+# "CellType3" = "conjunctival epithelial cell"
+# "CellType4" = "hepatocyte"
+# "CellType5" = "conjunctival epithelial cell", "corneal epithelial cell"
+# "CellType6" = "hepatocyte", "kidney epithelial cell"
+# "CellType7" = "corneal epithelial cell"
+# "CellType8" = "kidney epithelial cell"
+# "CellType9" = "mesenchymal stem cell"
+# "CellType10" = "skeletal muscle satellite stem cell"
+# "CellType11" = "mesenchymal stem cell", "skeletal muscle satellite stem cell"
+# "CellType12" = "B cell", "plasma cell"
+
+set.seed(123)
+gene_expC <- apply(celltypeC_combs, 1, function(x){
+    if (x[1] == "CellType1") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType2") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType3") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType4") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "hepatocyte"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType5") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType6") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "hepatocyte"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "kidney epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType7") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType8") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "kidney epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType9") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType10") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "skeletal muscle satellite stem cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType11") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "skeletal muscle satellite stem cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType12") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } 
+    return(exp)
+})
+
+gene_expC <- do.call(cbind, gene_expC) # combine gene expression of all cell types
+colnames(gene_expC) <- paste0("c_Cell", c(1:ncol(gene_expC)))
+rownames(gene_expC) <- paste0("Gene", c(1:nrow(gene_expC)))
+# cell id and cell label metadata
+cell_typeC <- cbind(CellID = colnames(gene_expC), cell_typeC)
+```
+
+```{r}
+#### creating SpatialExperiment object for Complex ####
+
+speC <- SpatialExperiment(assays = list(counts = gene_expC), 
+                          colData = cell_typeC, 
+                          spatialCoordsNames = c("x", "y"))
+reducedDim(speC, "spatial") <- spatialCoords(speC)
+speC$Pattern <- "Complex"
+speC$CellType <- factor(speC$CellType, levels = paste0("CellType", seq_len(12)))
+levels(speC$CellType) <- str_split_i(levels(speC$CellType), pattern = "Type", 2)
+
+set.seed(123)
+speC <- logNormCounts(speC)
+speC <- runPCA(speC)
+speC <- runUMAP(speC)
+speC
+saveRDS(speC, file = "./data_outputs/simDataOut/speC.Rds")
+```
+
+## Uniform spe
+
+```{r}
+#### allocating labels (CellType1-12) to coordinates ####
+
+cell_typeU <- data.frame(CellType = sim_uniform(coords, 12), coords) %>%
+    arrange(CellType) # data frame of coordinates and their labels
+celltypeU_combs <- as.data.frame(table(cell_typeU$CellType)) # cell number / label
+```
+
+```{r}
+#### allocating gene expression to each coordinate based on label ####
+
+# Celltype_design
+# "CellType1" = "B cell"
+# "CellType2" = "plasma cell"
+# "CellType3" = "conjunctival epithelial cell"
+# "CellType4" = "corneal epithelial cell"
+# "CellType5" = "retinal blood vessel endothelial cell"
+# "CellType6" = "kidney epithelial cell"
+# "CellType7" = "hepatocyte"
+# "CellType8" = "mesenchymal stem cell"
+# "CellType9" = "skeletal muscle satellite stem cell"
+# "CellType10" = "B cell", "plasma cell"
+# "CellType11" = "conjunctival epithelial cell", "corneal epithelial cell"
+# "CellType12" = "mesenchymal stem cell", "skeletal muscle satellite stem cell"
+
+set.seed(123)
+gene_expU <- apply(celltypeU_combs, 1, function(x){
+    if (x[1] == "CellType1") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType2") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType3") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType4") {
+        cell_id <- sample(colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+                          as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType5") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "retinal blood vessel endothelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType6") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "kidney epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType7") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "hepatocyte"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType8") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType9") {
+        cell_id <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "skeletal muscle satellite stem cell"]), 
+            as.numeric(x[2]))
+        exp <- counts(sce_hvg[, cell_id])
+    } else if (x[1] == "CellType10") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "B cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "plasma cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType11") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "conjunctival epithelial cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "corneal epithelial cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } else if (x[1] == "CellType12") {
+        cell_id1 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "mesenchymal stem cell"]), 
+            as.numeric(x[2]))
+        cell_id2 <- sample(
+            colnames(sce_hvg[, sce_hvg$cell_type == "skeletal muscle satellite stem cell"]), 
+            as.numeric(x[2]))
+        exp <- (counts(sce_hvg[, cell_id1]) + counts(sce_hvg[, cell_id2])) / 2
+    } 
+    return(exp)
+})
+
+gene_expU <- do.call(cbind, gene_expU) # combine gene expression of all cell types
+colnames(gene_expU) <- paste0("u_Cell", c(1:ncol(gene_expU)))
+rownames(gene_expU) <- paste0("Gene", c(1:nrow(gene_expU)))
+# cell id and cell label metadata
+cell_typeU <- cbind(CellID = colnames(gene_expU), cell_typeU)
+```
+
+```{r}
+#### creating SpatialExperiment object for Uniform ####
+
+speU <- SpatialExperiment(assays = list(counts = gene_expU), 
+                          colData = cell_typeU, 
+                          spatialCoordsNames = c("x", "y"))
+reducedDim(speU, "spatial") <- spatialCoords(speU)
+speU$Pattern <- "Uniform"
+speU$CellType <- factor(speU$CellType, levels = paste0("CellType", seq_len(12)))
+levels(speU$CellType) <- str_split_i(levels(speU$CellType), pattern = "Type", 2)
+
+set.seed(123)
+speU <- logNormCounts(speU)
+speU <- runPCA(speU)
+speU <- runUMAP(speU)
+speU
+saveRDS(speU, file = "./data_outputs/simDataOut/speU.Rds")
+```
+
+# Segmentation errors simulation
+
+```{r}
+# downsample proportions from 1 (no errors), 0.9 (10% errors),..., to 0.1 (90% errors)
+x_prop <- seq(1, 0.1, by = -0.1)
+
+# reading simulated data
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+# list of simulated data variables
+spe_objects <- c("speP", "speG", "speC", "speU")
+
+for (obj in spe_objects) { # for each simulated data
+    spe <- get(obj)
+    xy_pos <- spatialCoords(spe) # extract spatial coordinates
+    countExp <- counts(spe) # extract raw counts
+    print(paste("Starting", obj)) 
+    # identify 5 nearest neighbours of each cell
+    nMat_tmp <- findKNN(xy_pos, k = 5, BNPARAM = KmknnParam())
+    set.seed(123)
+    for (prop in x_prop) { # for each downsample proportion
+        # downsample cell raw counts by downsample proportion
+        X_s1 <- downsampleMatrix(countExp, prop) 
+        # randomly select 1 out of 5 neighbouring cells ofr each cell
+        n_vect <- unlist(apply(nMat_tmp$index, 1, function(x) {
+            return(sample(x, 1))}))
+        X_nei <- countExp[, n_vect] # selected neighbours' gene expressions
+        # scale downsample proportion by ratio of index and neighbouring cell library sizes
+        scaled_prop <- (1 - prop) * (colSums(countExp) / colSums(X_nei))
+        # downsample neighbouring cell raw counts by scaled downsample proportion
+        X_s2 <- downsampleMatrix(X_nei, scaled_prop)
+        # combining downsampled raw counts of index and neighbouring cells
+        newExp <- X_s1 + X_s2
+        # adding new counts to spe object as a new assay
+        assay(spe, paste0("SegErrProp", prop)) <- newExp
+        print(paste(obj, prop, "proportion completed."))
+    }
+    saveRDS(spe, file = paste0("./data_outputs/simDataOut/", obj, "_segErr.Rds"))
+}
+```
+
+# Sparsity simulation
+
+```{r}
+# downsample proportions from 1 (original counts), 0.9 (10% added sparsity),..., 
+# to 0.1 (90% added sparsity)
+x_prop <- seq(1, 0.1, by = -0.1)
+
+# reading simulated data
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+# list of simulated data variables
+spe_objects <- c("speP", "speG", "speU", "speC")
+
+for (obj in spe_objects) { # for each simulated data
+    spe <- get(obj)
+    countExp <- counts(spe) # extract raw counts
+    print(paste("Starting", obj))
+    
+    set.seed(123)
+    for (prop in x_prop) { # for each sparsity proportion
+        # downsampling cell raw counts by downsample proportion
+        newExp <- downsampleMatrix(countExp, as.numeric(prop))
+        # adding downsampled counts to spe object as a new assay
+        assay(spe, paste0("SparsePropTo", prop)) <- newExp
+        print(paste(obj, prop, "proportion completed."))
+    }
+    saveRDS(spe, file = paste0("./data_outputs/simDataOut/", obj, "_downSamp.Rds"))
+}
+```
+
+# ClustSIGNAL simulated data analysis
+
+## Parameter testing - part 1
+
+```{r}
+#### Analysis design ####
+# patterns tested: Patched, Gradient, Complex, Uniform
+# iterations: 20
+# parameters tested:
+#   neighbourhood size - 10, 20, 30, 40, and 50 nearest neighbours
+#   kernel type - Gaussian or exponential
+#   kernel spread - 0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5, 10, 15, 20, 25, and 30 
+#       SD or rate
+
+# reading simulated data
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+test_params1 <- expand.grid(c("speP", "speG", "speU", "speC"), seq_len(20),
+                            seq(10, 50, by = 10), c("G", "E"), 
+                            c(0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5, 10, 15, 20,
+                              25, 30))
+colnames(test_params1) <- c("Pattern", "Run", "NN", "kernel", "spread")
+dim(test_params1)
+
+set.seed(2025)
+ari_param1_df <- data.frame(matrix(nrow = 0, ncol = 8))
+for (i in seq_len(nrow(test_params1))){ # for each parameters and dataset combination
+    spe <- get(as.character(test_params1[i, "Pattern"])) # get spe object
+    NN_param <- test_params1[i, "NN"] # neighbourhood size
+    kernel_param <- as.character(test_params1[i, "kernel"]) # kernel type
+    spread_param <- test_params1[i, "spread"] # kernel spread
+    # run ClustSIGNAL using specific parameter combination
+    res <- clustSIGNAL(spe, dimRed = "PCA", samples = "sample_id", NN = NN_param, 
+                       kernel = kernel_param, spread = spread_param, outputs = "s")
+    spe_final <- res$spe_final # get output spe object containing results
+    ari_param1_df <- rbind(
+        ari_param1_df, 
+        data.frame(Pattern = unique(spe_final$Pattern), 
+                   Run = test_params1[i, "Run"],
+                   NN = NN_param, 
+                   kernel = kernel_param, 
+                   spread = spread_param,
+                   ARI = round(ARI(spe_final$CellType, spe_final$ClustSIGNAL), 3),
+                   NMI = round(NMI(spe_final$CellType, spe_final$ClustSIGNAL), 3),
+                   Clusters = length(unique(spe_final$ClustSIGNAL))))
+} 
+saveRDS(ari_param1_df, 
+        file = "./data_outputs/simDataOut/ari_paramTest1_iter20.Rds")
+```
+
+## Parameter testing - part 2
+
+```{r}
+#### Analysis design ####
+# patterns tested: Patched, Gradient, Complex, Uniform
+# iterations: 20
+# parameters tested:
+#   neighbourhood sorting - True, False
+#   k-centroids - 5, 10, 15, 20
+#   clustering method - Louvain, Infomap, Walktrap, Label propagation
+
+# reading simulated data
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+select_NN <- 30 # selected from parameter testing 1
+select_kernel <- "G" # default selection
+select_spread <- 0.3 # selected from parameter testing 1, for Gaussian kernel 
+test_params2 <- expand.grid(c("speP", "speG", "speU", "speC"), seq_len(20),
+                            select_NN, select_kernel, select_spread,
+                            c("TRUE", "FALSE"), seq(5, 20, by = 5),
+                            c("louvain", "infomap", "walktrap", "label_prop"))
+colnames(test_params2) <- c("Pattern", "Run", "NN", "kernel", "spread", "sort", 
+                            "k_centroids", "clusteringMethod")
+dim(test_params2)
+
+set.seed(2025)
+ari_param2_df <- data.frame(matrix(nrow = 0, ncol = 11))
+for (i in seq_len(nrow(test_params2))){ # for each parameters and dataset combination
+    spe <- get(as.character(test_params2[i, "Pattern"])) # get spe object
+    NN_param <- test_params2[i, "NN"] # neighbourhood size
+    kernel_param <- as.character(test_params2[i, "kernel"]) # kernel type
+    spread_param <- test_params2[i, "spread"] # kernel spread
+    sort_param <- as.character(test_params2[i, "sort"]) # neighbourhood sorting option
+    k_param <- test_params2[i, "k_centroids"] # k centroids value
+    clust_param <- as.character(test_params2[i, "clusteringMethod"]) # clustering method 
+    # run ClustSIGNAL using specific parameter combination
+    res <- clustSIGNAL(spe, dimRed = "PCA", samples = "sample_id", NN = NN_param, 
+                       kernel = kernel_param, spread = spread_param, 
+                       sort = sort_param, outputs = "s",
+                       clustParams = list(clust_c = 0, subclust_c = 0, 
+                                          iter.max = 30, k = k_param, 
+                                          cluster.fun = clust_param))
+    spe_final <- res$spe_final # get output spe object containing results
+    ari_param2_df <- rbind(
+        ari_param2_df, 
+        data.frame(Pattern = unique(spe_final$Pattern), 
+                   Run = test_params2[i, "Run"],
+                   NN = NN_param, 
+                   kernel = kernel_param, 
+                   spread = spread_param,
+                   sort = sort_param,
+                   k_centroids = k_param, 
+                   clusteringMethod = clust_param,
+                   ARI = round(ARI(spe_final$CellType, spe_final$ClustSIGNAL), 3),
+                   NMI = round(NMI(spe_final$CellType, spe_final$ClustSIGNAL), 3),
+                   Clusters = length(unique(spe_final$ClustSIGNAL))))
+}
+saveRDS(ari_param2_df, 
+        file = "./data_outputs/simDataOut/ari_paramTest2_iter20.Rds")
+```
+
+## Benchmarking adaptive smoothing
+
+```{r}
+#### Analysis design ####
+# patterns tested: Patched, Gradient, Complex, Uniform
+# iterations: 20
+# smoothing scenarios:
+#   adaptive smoothing - ClustSIGNAL
+#   no smoothing - Smooth0_k, initial clusters (initCluster) from ClustSIGNAL
+#   complete smoothing - Smooth100
+
+# loading functions for running various smoothing scenarios
+source("./simulation_scripts/simulation_functions.R") 
+
+# reading simulated data
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+iters <- expand.grid(seq(1, 20), c("speP", "speG", "speU", "speC"))
+colnames(iters) <- c("Run", "Pattern")
+
+set.seed(2025)
+ari_iter_df <- data.frame(matrix(nrow = 0, ncol = 11))
+for (i in seq_len(nrow(iters))) { # for each pattern run 
+    run_num <- iters[i, "Run"] # iteration number
+    spe <- get(as.character(iters[i, "Pattern"])) # get spe object
+    
+    # run ClustSIGNAL
+    res <- clustSIGNAL(spe, dimRed = "PCA", samples = "sample_id", outputs = "a")
+    
+    # run complete smoothing on ClustSIGNAL output spe object to add new result
+    res[["spe_final"]] <- smoothing100(res$spe_final, res$neighbours)
+    
+    n_ct <- length(unique(res$spe_final$ClustSIGNAL)) # ClustSIGNAL cluster number
+    # run no smoothing on complete smoothing output spe object to add new result
+    res[["spe_final"]] <- smoothing0(res$spe_final, k = n_ct)
+    
+    spe <- res$spe_final # get output spe object containing all results
+    ari_iter_df <- rbind(
+        ari_iter_df, 
+        data.frame(
+            Pattern = unique(spe$Pattern), 
+            Run = run_num,
+            ari_ClustSIGNAL = ARI(spe$CellType, spe$ClustSIGNAL),
+            ari_Smooth0 = ARI(spe$CellType, spe$initCluster), 
+            ari_Smooth0_k = ARI(spe$CellType, spe$reClust0),
+            ari_Smooth100 = ARI(spe$CellType, spe$reClust100),
+            Annotations = length(unique(spe$CellType)),
+            clusts_ClustSIGNAL = length(unique(spe$ClustSIGNAL)),
+            clusts_Smooth0 = length(unique(spe$initCluster)), 
+            clusts_Smooth0_k = length(unique(spe$reClust0)),
+            clusts_Smooth100 = length(unique(spe$reClust100))))
+    print(paste("Run", i, "complete."))
+}
+ari_iter_df$ari_ClustSIGNAL <- as.numeric(ari_iter_df$ari_ClustSIGNAL)
+ari_iter_df$ari_Smooth0 <- as.numeric(ari_iter_df$ari_Smooth0)
+ari_iter_df$ari_Smooth0_k <- as.numeric(ari_iter_df$ari_Smooth0_k)
+ari_iter_df$ari_Smooth100 <- as.numeric(ari_iter_df$ari_Smooth100)
+ari_iter_df <- ari_iter_df %>% arrange(Pattern)
+saveRDS(ari_iter_df, file = "./data_outputs/simDataOut/ari_smoothBench_iter20.Rds")
+```
+
+## Segmentation error testing
+
+```{r}
+#### Analysis design ####
+# patterns tested: Patched, Gradient, Complex, Uniform
+# iterations: 20
+# smoothing scenarios:
+#   adaptive smoothing - ClustSIGNAL
+#   no smoothing - Smooth0_k, initial clusters (initCluster) from ClustSIGNAL
+#   complete smoothing - Smooth100
+# segmentation error proportions: 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1
+
+# loading functions for running various smoothing scenarios
+source("./simulation_scripts/simulation_functions.R") 
+
+# reading simulated data containing segmentation error assays
+speP <- readRDS("./data_outputs/simDataOut/speP_segErr.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG_segErr.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC_segErr.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU_segErr.Rds")
+
+seg_tests <- expand.grid(seq(1, 20), c("speP", "speG", "speU", "speC"),
+                         paste0("SegErrProp", seq(1, 0.1, by = -0.1)))
+colnames(seg_tests) <- c("Run", "Pattern", "Assay")
+dim(seg_tests)
+
+set.seed(2025)
+ari_seg_df <- data.frame(matrix(nrow = 0, ncol = 13))
+for (i in seq_len(nrow(seg_tests))) { # for each pattern and assay combination 
+    run_num <- seg_tests[i, "Run"] # iteration
+    spe <- get(as.character(seg_tests[i, "Pattern"])) # get spe object
+    assay <- as.character(seg_tests[i, "Assay"]) # segmentation error assay
+    spe <- logNormCounts(spe, assay.type = assay) # log normalise raw counts
+    spe <- runPCA(spe) # dimension reduction
+    
+    # reun ClustSIGNAL
+    res <- clustSIGNAL(spe, dimRed = "PCA", samples = "sample_id", outputs = "a")
+    
+    # run complete smoothing on ClustSIGNAL output spe object to add new result
+    res[["spe_final"]] <- smoothing100(res$spe_final, res$neighbours)
+    
+    n_ct <- length(unique(res$spe_final$ClustSIGNAL)) # ClustSIGNAL cluster number
+    # run no smoothing on complete smoothing output spe object to add new result
+    res[["spe_final"]] <- smoothing0(res$spe_final, k = n_ct)
+    
+    spe <- res$spe_final # get output spe object containing all results
+    ari_seg_df <- rbind(
+        ari_seg_df, 
+        data.frame(Pattern = unique(spe$Pattern), 
+                   Run = run_num, 
+                   Assay = assay,
+                   ErrorProp = 1 - as.numeric(gsub(assay, pattern = "SegErrProp", 
+                                                   replacement = "")),
+                   ari_ClustSIGNAL = ARI(spe$CellType, spe$ClustSIGNAL),
+                   ari_Smooth0 = ARI(spe$CellType, spe$initCluster),
+                   ari_Smooth0_k = ARI(spe$CellType, spe$reClust0),
+                   ari_Smooth100 = ARI(spe$CellType, spe$reClust100),
+                   Annotations = length(unique(spe$CellType)),
+                   clusts_ClustSIGNAL = length(unique(spe$ClustSIGNAL)),
+                   clusts_Smooth0 = length(unique(spe$initCluster)), 
+                   clusts_Smooth0_k = length(unique(spe$reClust0)),
+                   clusts_Smooth100 = length(unique(spe$reClust100))))
+    print(paste("Run", i, "complete."))
+}
+ari_seg_df$ari_ClustSIGNAL <- as.numeric(ari_seg_df$ari_ClustSIGNAL)
+ari_seg_df$ari_Smooth0 <- as.numeric(ari_seg_df$ari_Smooth0)
+ari_seg_df$ari_Smooth0_k <- as.numeric(ari_seg_df$ari_Smooth0_k)
+ari_seg_df$ari_Smooth100 <- as.numeric(ari_seg_df$ari_Smooth100)
+ari_seg_df <- ari_seg_df %>% arrange(Pattern)
+saveRDS(ari_seg_df, file = "./data_outputs/simDataOut/ari_segErrorRuns_iter20.Rds")
+```
+
+## Sparsity testing
+
+```{r}
+#### Analysis design ####
+# patterns tested: Patched, Gradient, Complex, Uniform
+# iterations: 20
+# smoothing scenarios:
+#   adaptive smoothing - ClustSIGNAL
+#   no smoothing - Smooth0_k, initial clusters (initCluster) from ClustSIGNAL
+#   complete smoothing - Smooth100
+# sparsity proportions: 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1
+
+# loading functions for running various smoothing scenarios
+source("./simulation_scripts/simulation_functions.R") 
+
+# reading simulated data containing segmentation error assays
+speP <- readRDS("./data_outputs/simDataOut/speP_downSamp.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG_downSamp.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC_downSamp.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU_downSamp.Rds")
+
+sparse_tests <- expand.grid(seq(1, 20), c("speP", "speG", "speU", "speC"),
+                            paste0("SparsePropTo", seq(1, 0.1, by = -0.1)))
+colnames(sparse_tests) <- c("Run", "Pattern", "Assay")
+dim(sparse_tests)
+
+set.seed(2025)
+ari_dsamp_df <- data.frame(matrix(nrow = 0, ncol = 13))
+for (i in seq_len(nrow(sparse_tests))) { # for each pattern and assay combination
+    run_num <- sparse_tests[i, "Run"] # iteration
+    spe <- get(as.character(sparse_tests[i, "Pattern"])) # get spe object
+    assay <- as.character(sparse_tests[i, "Assay"]) # sparse assay
+    spe <- logNormCounts(spe, assay.type = assay) # log normalise raw counts
+    spe <- runPCA(spe) # dimension reduction
+    
+    # run ClustSIGNAL
+    res <- clustSIGNAL(spe, dimRed = "PCA", samples = "sample_id", outputs = "a")
+    
+    # run complete smoothing on ClustSIGNAL output spe object to add new result
+    res[["spe_final"]] <- smoothing100(res$spe_final, res$neighbours)
+    
+    n_ct <- length(unique(res$spe_final$ClustSIGNAL)) # ClustSIGNAL cluster number
+    # run no smoothing on complete smoothing output spe object to add new result
+    res[["spe_final"]] <- smoothing0(res$spe_final, k = n_ct)
+    
+    spe <- res$spe_final # get output spe object containing all results
+    ari_dsamp_df <- rbind(
+        ari_dsamp_df, 
+        data.frame(Pattern = unique(spe$Pattern), 
+                   Run = run_num, 
+                   Assay = assay,
+                   SparsityProp = 1 - as.numeric(gsub(assay, pattern = "SparsePropTo", 
+                                                      replacement = "")),
+                   ari_ClustSIGNAL = ARI(spe$CellType, spe$ClustSIGNAL),
+                   ari_Smooth0 = ARI(spe$CellType, spe$initCluster), 
+                   ari_Smooth0_k = ARI(spe$CellType, spe$reClust0),
+                   ari_Smooth100 = ARI(spe$CellType, spe$reClust100),
+                   Annotations = length(unique(spe$CellType)),
+                   clusts_ClustSIGNAL = length(unique(spe$ClustSIGNAL)),
+                   clusts_Smooth0 = length(unique(spe$initCluster)), 
+                   clusts_Smooth0_k = length(unique(spe$reClust0)),
+                   clusts_Smooth100 = length(unique(spe$reClust100))))
+    print(paste("Run", i, "complete."))
+}
+ari_dsamp_df$ari_ClustSIGNAL <- as.numeric(ari_dsamp_df$ari_ClustSIGNAL)
+ari_dsamp_df$ari_Smooth0 <- as.numeric(ari_dsamp_df$ari_Smooth0)
+ari_dsamp_df$ari_Smooth0_k <- as.numeric(ari_dsamp_df$ari_Smooth0_k)
+ari_dsamp_df$ari_Smooth100 <- as.numeric(ari_dsamp_df$ari_Smooth100)
+ari_dsamp_df <- ari_dsamp_df %>% arrange(Pattern)
+saveRDS(ari_dsamp_df, file = "./data_outputs/simDataOut/ari_sparsityRuns_iter20.Rds")
+```
+
+## Clustering stability testing
+
+```{r}
+#### Analysis design ####
+# patterns tested: Patched, Gradient, Complex, Uniform
+# iterations: 20
+# initial clustering methods:
+#   Graph-based clustering - Louvain (ClustSIGNAL default), Walktrap
+#   Density-based clustering - DBSCAN
+#   Centroid-based clustering - mbkmeans
+
+# loading functions for running various clustering methods
+source("./simulation_scripts/simulation_functions.R") 
+
+# reading simulated data
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+initC_tests <- expand.grid(seq(1, 20), c("speP", "speG", "speU", "speC"))
+colnames(initC_tests) <- c("Run", "Pattern")
+dim(initC_tests)
+
+set.seed(2025)
+output_initC_df <- data.frame(matrix(nrow = 0, ncol = 26))
+for (i in seq_len(nrow(initC_tests))) { # for each pattern iteration
+    run_num <- initC_tests[i, "Run"] # iteration
+    spe <- get(as.character(initC_tests[i, "Pattern"])) # get spe object
+    
+    #### Running ClustSIGNAL step-by-step to incorporate 
+    #### different initial clustering methods
+    
+    # louvain clustering (default in ClustSIGNAL)
+    spe_louvain <- p1_clustering(spe, dimRed = "PCA")
+    outDat_louvain <- neighbourDetect(spe_louvain, samples = "sample_id")
+    spe_louvain <- entropyMeasure(spe_louvain, outDat_louvain$regXclust)
+    spe_louvain <- adaptiveSmoothing(spe_louvain, outDat_louvain$nnCells)
+    spe_louvain <- p2_clustering(spe_louvain)
+    cluster_summary <- data.frame(clusters = spe_louvain$initCluster, 
+                                  subclusters = spe_louvain$initSubcluster) %>%
+        group_by(clusters) %>%
+        summarise(num_subclusters = n_distinct(subclusters)) %>% 
+        as.data.frame()
+    
+    # mkmeans clustering
+    spe_mbkmeans <- mbkmeans_clust(spe, dimRed = "PCA", cluster_summary)
+    outDat_mbkmeans <- neighbourDetect(spe_mbkmeans, samples = "sample_id")
+    spe_mbkmeans <- entropyMeasure(spe_mbkmeans, outDat_mbkmeans$regXclust)
+    spe_mbkmeans <- adaptiveSmoothing(spe_mbkmeans, outDat_mbkmeans$nnCells)
+    spe_mbkmeans <- p2_clustering(spe_mbkmeans)
+    
+    # walktrap clustering
+    spe_walk <- walktrap_clust(spe, dimRed = "PCA")
+    outDat_walk <- neighbourDetect(spe_walk, samples = "sample_id")
+    spe_walk <- entropyMeasure(spe_walk, outDat_walk$regXclust)
+    spe_walk <- adaptiveSmoothing(spe_walk, outDat_walk$nnCells)
+    spe_walk <- p2_clustering(spe_walk)
+    
+    # dbscan clustering
+    spe_dbscan <- dbscan_clust(spe)
+    outDat_dbscan <- neighbourDetect(spe_dbscan, samples = "sample_id")
+    spe_dbscan <- entropyMeasure(spe_dbscan, outDat_dbscan$regXclust)
+    spe_dbscan <- adaptiveSmoothing(spe_dbscan, outDat_dbscan$nnCells)
+    spe_dbscan <- p2_clustering(spe_dbscan)
+    
+    # gathering output from all clustering method outcomes
+    output_initC_df <- rbind(
+        output_initC_df, 
+        data.frame(
+            Pattern = unique(spe$Pattern), 
+            Run = run_num,
+            # louvain data
+            initCluster_louvain = length(unique(spe_louvain$initCluster)),
+            initSubcluster_louvain = length(unique(spe_louvain$initSubcluster)),
+            ClustSIGNAL_louvain = length(unique(spe_louvain$ClustSIGNAL)),
+            # mbkmeans data
+            EntropyCor_mbkmeans = cor(spe_louvain$entropy, spe_mbkmeans$entropy),
+            initCluster_mbkmeans = length(unique(spe_mbkmeans$initCluster)),
+            initSubcluster_mbkmeans = length(unique(spe_mbkmeans$initSubcluster)),
+            ClustSIGNAL_mbkmeans = length(unique(spe_mbkmeans$ClustSIGNAL)),
+            ari_initC_mbkmeans = ARI(spe_louvain$initCluster, spe_mbkmeans$initCluster),
+            ari_initS_mbkmeans = ARI(spe_louvain$initSubcluster, spe_mbkmeans$initSubcluster),
+            ari_ClustSIGNAL_mbkmeans = ARI(spe_louvain$CellType, spe_mbkmeans$ClustSIGNAL),
+            # walktrap data
+            EntropyCor_walk = cor(spe_louvain$entropy, spe_walk$entropy),
+            initCluster_walk = length(unique(spe_walk$initCluster)),
+            initSubcluster_walk = length(unique(spe_walk$initSubcluster)),
+            ClustSIGNAL_walk = length(unique(spe_walk$ClustSIGNAL)),
+            ari_initC_walk = ARI(spe_louvain$initCluster, spe_walk$initCluster),
+            ari_initS_walk = ARI(spe_louvain$initSubcluster, spe_walk$initSubcluster),
+            ari_ClustSIGNAL_walk = ARI(spe_louvain$CellType, spe_walk$ClustSIGNAL),
+            # dbscan data
+            EntropyCor_dbscan = cor(spe_louvain$entropy, spe_dbscan$entropy),
+            initCluster_dbscan = length(unique(spe_dbscan$initCluster)),
+            initSubcluster_dbscan = length(unique(spe_dbscan$initSubcluster)),
+            ClustSIGNAL_dbscan = length(unique(spe_dbscan$ClustSIGNAL)),
+            ari_initC_dbscan = ARI(spe_louvain$initCluster, spe_dbscan$initCluster),
+            ari_initS_dbscan = ARI(spe_louvain$initSubcluster, spe_dbscan$initSubcluster),
+            ari_ClustSIGNAL_dbscan = ARI(spe_louvain$CellType, spe_dbscan$ClustSIGNAL)))
+    print(paste("Run", i, "complete."))
+}
+output_initC_df <- output_initC_df %>% arrange(Pattern)
+saveRDS(output_initC_df, 
+        file = "./data_outputs/simDataOut/output_initClusterTest_iter20.Rds")
+```
