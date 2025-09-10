@@ -40,27 +40,6 @@ library(igraph)
 library(tidyr)
 ```
 
-# Colors for visualisations
-
-```{r}
-colors <-c("CellType1" = "#635547", "CellType2" = "#139992", 
-           "CellType3" = "#C72228", "CellType4" = "#C9EBFB", 
-           "CellType5" = "#FACB12", "CellType6" = "#65A83E", 
-           "CellType7" = "#532C8A", "CellType8" = "#ff891c", 
-           "CellType9" = "#F6BFCB")
-
-methodColors <- c("#0F4A9C", "#139992", "#EF4E22", "#E1C239")
-
-allColors <- c("#635547", "#139992", "#C72228", "#C9EBFB", "#FACB12", "#65A83E",
-               "#532C8A", "#ff891c", "#F6BFCB", "#C594BF", "#DFCDE4", "#8EC792", 
-               "#9DD84A", "#8DB5CE", "#005579", "#3F84AA", "#B51D8D", "#0F4A9C", 
-               "#8870ad", "#cc7818", "#FBBE92", "#EF4E22", "#f9decf", "#c9a997", 
-               "#C72228", "#f79083", "#F397C0", "#DABE99", "#c19f70", "#354E23", 
-               "#C3C388", "#647a4f", "#CDE088", "#f7f79e", "#EF5A9D", "#7F6874", 
-               "#989898", "#1A1A1A", "#FFFFFF", "#e6e6e6", "#77441B", "#F90026", 
-               "#A10037", "#DA5921", "#E1C239")
-```
-
 # Reference gene expression
 
 Single cell gene expression - human cell atlas downloaded from [CellxGene](https://cellxgene.cziscience.com/collections/e5f58829-1a66-40b5-a624-9046778e74f5).
@@ -170,7 +149,6 @@ scaled_data <- t(scale(t(gene_counts_avg)))
 pheatmap(scaled_data, cluster_rows = TRUE, cluster_cols = TRUE, 
          main = "Gene Expression by Cell Type")
 ```
-
 
 # Spatial data simulations
 
