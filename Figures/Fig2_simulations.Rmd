@@ -68,9 +68,6 @@ panel_a <- plotReducedDim(spe, dimred = "spatial", color_by = "CellType",
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2a.pdf", plot = panel_a, unit = "in",
-       width = 3, height = 10.5)
 ```
 
 # Panel b - parameter testing 1
@@ -112,9 +109,6 @@ panel_b <- ggplot(ari_summary1, aes(x = spread, y = meanARI,
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2b.pdf", plot = panel_b, unit = "in",
-       width = 5, height = 10)
 ```
 
 # Panel c - parameter testing 2
@@ -159,9 +153,6 @@ panel_c <- ggplot(ari_summary2,
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2c.pdf", plot = panel_c, unit = "in",
-       width = 3.5, height = 10)
 ```
 
 # Panel d - benchmarking adaptive smoothing
@@ -197,9 +188,6 @@ panel_d <- ggplot(ari_iter_df_melt,
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2d.pdf", plot = panel_d, unit = "in",
-       width = 3, height = 10)
 ```
 
 # Panel e - sparsity testing
@@ -250,9 +238,6 @@ panel_e <- ggplot(mean_ari_dsamp,
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2e.pdf", plot = panel_e, unit = "in",
-       width = 3, height = 10)
 ```
 
 # Panel f - segmentation error testing
@@ -302,9 +287,6 @@ panel_f <- ggplot(mean_ari_err,
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2f.pdf", plot = panel_f, unit = "in",
-       width = 3, height = 10)
 ```
 
 # Panel g - clustering stability 1
@@ -350,9 +332,6 @@ panel_g <- ggplot(ari_melt[ari_melt$data != "initSubcluster", ],
         legend.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2g.pdf", plot = panel_g, unit = "in",
-       width = 3, height = 10)
 ```
 
 # Panel h - clustering stability 2
@@ -391,7 +370,4 @@ panel_h <- ggplot(entropy_melt, aes(x = variable, y = value, group = variable,
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 14),
           legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Fig2h.pdf", plot = panel_h, unit = "in",
-       width = 3, height = 9.2)
 ```

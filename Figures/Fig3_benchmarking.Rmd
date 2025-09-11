@@ -132,9 +132,6 @@ spatialPlots_list <- setNames(
 # combining the spatial plots
 sp_plots_comb <- wrap_plots(spatialPlots_list, nrow = 4) + 
   plot_layout(axes = "collect", guides = "collect", heights = c(5, 4, 4, 4))
-
-ggsave("./data_outputs/visuals/Bench_singleSamples_spPlots.pdf", 
-       plot = sp_plots_comb, width = 12, height = 10, units = "in")
 ```
 
 # Panels e-g - performance metrics plots
@@ -220,7 +217,4 @@ memUsage_plot <- compute_metrics %>%
 comb_resource_plot <- ari_plot + runtime_plot + memUsage_plot +
   plot_layout(guides = "collect", ncol = 3, widths = c(1.5, 1, 1)) &
   theme(legend.position = "bottom")
-
-ggsave("./data_outputs/visuals/Bench_metrics.pdf",
-       plot = comb_resource_plot, width = 12, height = 4, units = "in")
 ```
