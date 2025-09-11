@@ -1,0 +1,397 @@
+---
+title: "Fig. 2: ClustSIGNAL’s adaptive smoothing approach is robust"
+author: "Pratibha Panwar"
+date: "2025-09-11"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r}
+library(SpatialExperiment)
+library(scater)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(stringr)
+```
+
+# Colours
+
+```{r}
+allColors <- c("#635547", "#139992", "#C72228", "#C9EBFB", "#FACB12", "#65A83E",
+               "#532C8A", "#ff891c", "#F6BFCB", "#C594BF", "#DFCDE4", "#8EC792",
+               "#9DD84A", "#8DB5CE")
+
+methodColors <- setNames(c("#0F4A9C", "#139992", "#EF4E22", "#E1C239"),
+                         c("ClustSIGNAL", "Smooth0", "Smooth0_k", "Smooth100"))
+
+NN_colors <- setNames(c("grey10", "grey30", "red", "grey50", "grey70"), 
+                      seq(10, 50, 10))
+
+clustAlgo_colors <- setNames(c("red", "grey50", "grey70", "grey30"), 
+                             c("louvain", "walktrap", "infomap", "label_prop"))
+```
+
+# Panel a - simulation patterns
+
+```{r}
+# reading simulated datasets
+speP <- readRDS("./data_outputs/simDataOut/speP.Rds")
+speG <- readRDS("./data_outputs/simDataOut/speG.Rds")
+speC <- readRDS("./data_outputs/simDataOut/speC.Rds")
+speU <- readRDS("./data_outputs/simDataOut/speU.Rds")
+
+spe <- cbind(speP, speG, speC, speU) # combining spe objects
+
+# arranging patterns from high to low spatial structure
+spe$Pattern <- factor(spe$Pattern, levels = c("Patched", "Gradient", "Complex",
+                                              "Uniform"))
+
+panel_a <- plotReducedDim(spe, dimred = "spatial", color_by = "CellType", 
+                          point_alpha = 1, point_size = 0.7) +
+    facet_wrap(~spe$Pattern, ncol = 1) +
+    guides(colour = guide_legend(override.aes = list(size = 5), nrow = 3, 
+                                 by_row = F)) +
+    scale_color_manual(values = allColors, name = "Cell\nlabels") +
+    theme_classic() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_text(size = 14),
+          strip.text = element_blank(),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2a.pdf", plot = panel_a, unit = "in",
+       width = 3, height = 10.5)
+```
+
+# Panel b - parameter testing 1
+
+```{r}
+# reading outcome of parameter testing 1
+ari_param1_df <- readRDS("./data_outputs/simDataOut/ari_paramTest1_iter20.Rds")
+
+# calculating mean ARI for each combination of dataset and parameter combination
+ari_summary1 <- ari_param1_df %>% 
+    group_by(Pattern, NN, spread, kernel) %>%
+    summarise(meanARI = mean(ARI)) %>%
+    as.data.frame()
+
+ari_summary1$NN <- factor(ari_summary1$NN)
+ari_summary1$spread <- factor(ari_summary1$spread)
+# arranging patterns from high to low spatial structure
+ari_summary1$Pattern <- factor(ari_summary1$Pattern, 
+                               levels = c( "Patched", "Gradient", 
+                                           "Complex", "Uniform"))
+ari_summary1$kernel <- factor(ari_summary1$kernel, levels = c("G", "E"))
+
+panel_b <- ggplot(ari_summary1, aes(x = spread, y = meanARI,
+                                    group = NN, colour = NN, shape = NN)) +
+    geom_line(linewidth = 0.5) +
+    geom_point(size = 1.5) +
+    facet_wrap(vars(Pattern, kernel), ncol = 2, axes = "all_x") +
+    guides(colour = guide_legend(title.position = "top"),
+           shape = guide_legend(override.aes = list(size = 5))) +
+    scale_color_manual(values = NN_colors) +
+    scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+    labs(x = "Distribution spread (spread)", y = "Mean ARI", 
+         colour = "Neighbourhood size (N)", shape = "Neighbourhood size (N)") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 12),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          strip.text = element_blank(),
+          axis.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2b.pdf", plot = panel_b, unit = "in",
+       width = 5, height = 10)
+```
+
+# Panel c - parameter testing 2
+
+```{r}
+# reading outcome of parameter testing 2
+ari_param2_df <- readRDS("./data_outputs/simDataOut/ari_paramTest2_iter20.Rds")
+
+# calculating mean ARI for each combination of dataset and parameter combination
+ari_summary2 <- ari_param2_df %>% 
+    group_by(Pattern, sort, k_centroids, clusteringMethod) %>%
+    summarise(meanARI = mean(ARI))
+as.data.frame()
+
+ari_summary2$k_centroids <- factor(ari_summary2$k_centroids)
+ari_summary2$sort <- factor(ari_summary2$sort, levels = c("TRUE", "FALSE"))
+# arranging patterns from high to low spatial structure
+ari_summary2$Pattern <- factor(ari_summary2$Pattern, 
+                               levels = c( "Patched", "Gradient", 
+                                           "Complex", "Uniform"))
+ari_summary2$clusteringMethod <- factor(ari_summary2$clusteringMethod, 
+                                        levels = c("louvain", "walktrap", 
+                                                   "infomap", "label_prop"))
+
+panel_c <- ggplot(ari_summary2, 
+                  aes(x = k_centroids, y = meanARI, group = clusteringMethod, 
+                      colour = clusteringMethod, shape = clusteringMethod)) +
+    geom_line(linewidth = 0.5) +  
+    geom_point(size = 1.5) +
+    facet_wrap(vars(Pattern, sort), ncol = 2, axes = "all_x") +
+    scale_color_manual(values = clustAlgo_colors) + 
+    scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+    guides(color = guide_legend(nrow = 2), 
+           shape = guide_legend(override.aes = list(size = 5))) +
+    labs(x = "Number of nearest neighbours (k)", y = "Mean ARI", 
+         colour = "Clustering\nmethod", shape = "Clustering\nmethod") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 12),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          strip.text = element_blank(),
+          axis.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2c.pdf", plot = panel_c, unit = "in",
+       width = 3.5, height = 10)
+```
+
+# Panel d - benchmarking adaptive smoothing
+
+```{r}
+# reading outcome of benchmarking adaptive smoothing
+ari_iter_df <- readRDS("./data_outputs/simDataOut/ari_smoothBench_iter20.Rds")
+
+# converting data frame into long format
+ari_iter_df_melt <- reshape2::melt(ari_iter_df[, 1:6], c("Pattern", "Run"))
+colnames(ari_iter_df_melt) <- c("Pattern", "Run", "Method", "ARI")
+
+ari_iter_df_melt$Method <- factor(ari_iter_df_melt$Method)
+levels(ari_iter_df_melt$Method) <- c("ClustSIGNAL", "Smooth0", "Smooth0_k", 
+                                     "Smooth100")
+# arranging patterns from high to low spatial structure
+ari_iter_df_melt$Pattern <- factor(ari_iter_df_melt$Pattern, 
+                                   levels = c( "Patched", "Gradient", 
+                                               "Complex", "Uniform"))
+
+panel_d <- ggplot(ari_iter_df_melt, 
+                  aes(x = Method, y = ARI, group = Method, fill = Method)) +
+    geom_boxplot(linewidth = 0.2) +
+    facet_wrap(vars(Pattern), ncol = 1, axes = "all_x") +
+    scale_fill_manual(values = methodColors) +
+    guides(fill = guide_legend(nrow = 2)) +
+    scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+    labs(y = "ARI", fill = "Smoothing\nscenario") +
+    theme_classic() + 
+    theme(axis.text = element_text(size = 12),
+          strip.text = element_blank(),
+          axis.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2d.pdf", plot = panel_d, unit = "in",
+       width = 3, height = 10)
+```
+
+# Panel e - sparsity testing
+
+```{r}
+# reading outcome of sparsity testing
+ari_dsamp_df <- readRDS("./data_outputs/simDataOut/ari_sparsityRuns_iter20.Rds")
+
+# converting data frame into long format
+ari_dsamp_df_melt <- reshape2::melt(ari_dsamp_df[, 1:8], 
+                                    c("Pattern", "Run", "Assay", "SparsityProp"))
+colnames(ari_dsamp_df_melt) <- c("Pattern", "Run", "Assay", "SparsityProp", 
+                                 "Method", "ARI")
+
+# calculating mean and range of ARI for each combination of 
+# dataset, sparsity proportion, and method
+mean_ari_dsamp <- ari_dsamp_df_melt %>% 
+    group_by(Pattern, Assay, SparsityProp, Method) %>%
+    summarise(minVal = min(ARI), 
+              maxVal = max(ARI), 
+              meanVal = mean(ARI), .groups = "drop")
+mean_ari_dsamp$SparsityProp <- factor(mean_ari_dsamp$SparsityProp)
+mean_ari_dsamp$Method <- factor(mean_ari_dsamp$Method)
+levels(mean_ari_dsamp$Method) <- c("ClustSIGNAL", "Smooth0", "Smooth0_k", 
+                                   "Smooth100")
+# arranging patterns from high to low spatial structure
+mean_ari_dsamp$Pattern <- factor(mean_ari_dsamp$Pattern, 
+                                 levels = c("Patched", "Gradient", 
+                                            "Complex", "Uniform"))
+
+panel_e <- ggplot(mean_ari_dsamp, 
+                  aes(x = SparsityProp, y = meanVal, ymin = minVal, 
+                      ymax = maxVal, group = Method, fill = Method)) +
+    geom_ribbon(alpha = 0.2) +
+    geom_line(aes(color = Method), linewidth = 0.5) +
+    facet_wrap(vars(Pattern), ncol = 1, axes = "all_x") +
+    scale_fill_manual(values = methodColors) +
+    scale_color_manual(values = methodColors) +
+    guides(fill = guide_legend(nrow = 2)) +
+    scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+    theme_classic() + 
+    labs(x = "Sparsity proportion", y = "ARI", fill = "Clustering\napproach", 
+         color = "Clustering\napproach") +
+    theme(axis.text = element_text(size = 12),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          strip.text = element_blank(),
+          axis.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2e.pdf", plot = panel_e, unit = "in",
+       width = 3, height = 10)
+```
+
+# Panel f - segmentation error testing
+
+```{r}
+# reading outcome of segmentation error testing
+ari_seg_df <- readRDS("./data_outputs/simDataOut/ari_segErrorRuns_iter20.Rds")
+
+# converting data frame into long format
+ari_seg_df_melt <- reshape2::melt(ari_seg_df[, 1:8], 
+                                  c("Pattern", "Run", "Assay", "ErrorProp"))
+colnames(ari_seg_df_melt) <- c("Pattern", "Run", "Assay", "ErrorProp", 
+                               "Method", "ARI")
+
+# calculating mean and range of ARI for each combination of 
+# dataset, error proportion, and method
+mean_ari_err <- ari_seg_df_melt %>% 
+    group_by(Pattern, Assay, ErrorProp, Method) %>%
+    summarise(minVal = min(ARI), maxVal = max(ARI), meanVal = mean(ARI),
+              .groups = "drop")
+mean_ari_err$ErrorProp <- factor(mean_ari_err$ErrorProp)
+mean_ari_err$Method <- factor(mean_ari_err$Method)
+levels(mean_ari_err$Method) <- c("ClustSIGNAL", "Smooth0", "Smooth0_k", 
+                                 "Smooth100")
+# arranging patterns from high to low spatial structure
+mean_ari_err$Pattern <- factor(mean_ari_err$Pattern, 
+                               levels = c("Patched", "Gradient", "Complex",
+                                          "Uniform"))
+
+panel_f <- ggplot(mean_ari_err, 
+                  aes(x = ErrorProp, y = meanVal, ymin = minVal, ymax = maxVal, 
+                      group = Method, fill = Method)) +
+    geom_ribbon(alpha = 0.2) +
+    geom_line(aes(color = Method), linewidth = 0.5) +
+    facet_wrap(vars(Pattern), ncol = 1, axes = "all_x") +
+    scale_fill_manual(values = methodColors) +
+    scale_color_manual(values = methodColors) +
+    guides(fill = guide_legend(nrow = 2)) +
+    scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+    theme_classic() + 
+    labs(x = "Segmentation error proportion", y = "ARI", 
+         fill = "Clustering\napproach", color = "Clustering\napproach") +
+    theme(axis.text = element_text(size = 12),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          strip.text = element_blank(),
+          axis.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2f.pdf", plot = panel_f, unit = "in",
+       width = 3, height = 10)
+```
+
+# Panel g - clustering stability 1
+
+```{r}
+# reading outcome of clustering stability testing
+output_initC_df <- readRDS("./data_outputs/simDataOut/output_initClusterTest_iter20.Rds")
+
+# arranging patterns from high to low spatial structure
+output_initC_df$Pattern <- factor(output_initC_df$Pattern, 
+                                  levels = c( "Patched", "Gradient", "Complex", 
+                                              "Uniform"))
+# extracting names of columns containing ARI values 
+ari_cols <- append(
+  c("Pattern", "Run"),
+  colnames(output_initC_df[, startsWith(colnames(output_initC_df), "ari")]))
+
+# converting data frame into long format
+ari_melt <- reshape2::melt(output_initC_df[, ari_cols], c("Pattern", "Run")) %>%
+    mutate(variable = str_split_i(variable, "ari_", 2))
+# extracting and adding data for cluster type
+ari_melt$data <- factor(str_split_i(ari_melt$variable, "_", 1),
+                        levels = c("initC", "initS", "ClustSIGNAL"))
+levels(ari_melt$data) <- c("initCluster", "initSubcluster", "ClustSIGNAL")
+# extracting and adding data for initial clustering method
+ari_melt$approach <- factor(str_split_i(ari_melt$variable, "_", 2))
+levels(ari_melt$approach) <- c("DBSCAN", "mbkmeans", "Walktrap")
+
+panel_g <- ggplot(ari_melt[ari_melt$data != "initSubcluster", ], 
+                      aes(y = value, group = data, fill = data)) +
+  geom_boxplot(linewidth = 0.2) +
+  facet_grid(Pattern~approach, axes = "all_x") +
+  guides(fill = guide_legend(title.position = "top")) +
+  scale_fill_manual(values = c("#354E23", "#EF5A9D")) +
+  ylim(0, 1) +
+  labs(y = "ARI", fill = "Louvain vs clustering method") +
+  theme_classic() + 
+  theme(axis.text = element_text(size = 12),
+        strip.text.y = element_blank(),
+        strip.text.x = element_text(size = 14),
+        strip.background = element_blank(),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2g.pdf", plot = panel_g, unit = "in",
+       width = 3, height = 10)
+```
+
+# Panel h - clustering stability 2
+
+```{r}
+# reading outcome of clustering stability testing
+output_initC_df <- readRDS("./data_outputs/simDataOut/output_initClusterTest_iter20.Rds")
+
+# arranging patterns from high to low spatial structure
+output_initC_df$Pattern <- factor(output_initC_df$Pattern, 
+                                  levels = c( "Patched", "Gradient", "Complex", 
+                                              "Uniform"))
+
+# extracting names of columns containing entropy correlation values 
+ent_cols <- append(
+    c("Pattern", "Run"), 
+    colnames(output_initC_df[, startsWith(colnames(output_initC_df), 
+                                          "EntropyCor")]))
+
+# converting data frame into long format
+entropy_melt <- reshape2::melt(output_initC_df[, ent_cols], c("Pattern", "Run")) %>%
+    mutate(variable = str_split_i(variable, "EntropyCor_", 2))
+entropy_melt$variable <- factor(entropy_melt$variable)
+levels(entropy_melt$variable) <- c("DBSCAN", "mbkmeans", "Walktrap")
+
+panel_h <- ggplot(entropy_melt, aes(x = variable, y = value, group = variable, 
+                                    colour = variable)) +
+    geom_boxplot(color = "black") +
+    facet_wrap(vars(Pattern), ncol = 1, axes = "all_x") +
+    ylim(0, 1) +
+    labs(y = "Entropy correlation", x = "Clustering method") +
+    theme_classic() + 
+    theme(axis.text = element_text(size = 12),
+          strip.text = element_blank(),
+          axis.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          legend.title = element_text(size = 14),
+          legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Fig2h.pdf", plot = panel_h, unit = "in",
+       width = 3, height = 9.2)
+```

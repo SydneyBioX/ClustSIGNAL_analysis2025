@@ -1,0 +1,226 @@
+---
+title: "Fig. 3: Benchmarking ClustSIGNAL with other spatial clustering methods"
+author: "Pratibha Panwar"
+date: "2025-09-11"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r}
+library(reshape2)
+library(dplyr)
+library(stringr)
+
+library(ggplot2)
+library(scattermore)
+library(patchwork)
+```
+
+```{r}
+colors_annots <- c("#635547", "#8EC792", "#9e6762", "#FACB12", "#3F84AA", 
+                   "#0F4A9C", "#ff891c", "#EF5A9D", "#C594BF", "#DFCDE4", 
+                   "#139992", "#65A83E", "#8DB5CE", "#005579", "#C9EBFB", 
+                   "#B51D8D", "#532C8A", "#8870ad", "#cc7818", "#FBBE92", 
+                   "#EF4E22", "#f9decf", "#c9a997")
+
+colors <- setNames(c("#635547", "#8EC792", "#9e6762", "#FACB12", "#3F84AA", 
+                     "#0F4A9C", "#EF5A9D", "#C594BF", "#ff891c", "#DFCDE4", 
+                     "#139992", "#65A83E", "#005579", "#8DB5CE", "#C72228", 
+                     "#B51D8D", "#532C8A", "#8870ad", "#cc7818", "#FBBE92", 
+                     "#EF4E22", "#f9decf", "#c9a997", "#C9EBFB", "#f79083", 
+                     "#F397C0", "#DABE99", "#c19f70", "#354E23", "#C3C388",
+                     "grey95", "white"), 
+                   c(1:30, "Unlabelled", "NA"))
+
+methodColors <- setNames(c("#0F4A9C", "#3dd3b9", "#ff891c", "#E1C239"),
+                         c("ClustSIGNAL", "BANKSY", "BASS", "SpatialPCA"))
+```
+
+# Panels a-d - spatial plots
+
+```{r}
+# Dataset and samples:
+#   mouse embryo - embryo2
+#   breast cancer - Rep1
+#   lung cancer - Lung9_Rep1
+#   mouse hypothalamus - Animal 7 Bregma -0.19
+
+# list of samples taken from 4 real-world datasets
+samples <- c("embryo2", "Xenium_FFPE_Human_Breast_Cancer_Rep1_outs", 
+             "Lung9_Rep1", "7.-0.19")
+
+# reading clustering outcome from benchmarking
+clustDF <- readRDS("./data_outputs/benchmarkOut/BenchDF.Rds")
+
+# sub-setting data from selected samples
+clustDF_sub <- clustDF[clustDF$Sample %in% samples, ]
+colnames(clustDF_sub) <- c("Cells", "Sample", "x", "y", "Celltype", "BASS", "BANKSY",
+                       "SpatialPCA", "ClustSIGNAL")
+
+# converting data frame into long format
+clustDF_melt <- reshape2::melt(clustDF_sub, id.vars = c("Cells", "Sample", "x", "y"))
+clustDF_melt$variable <- factor(clustDF_melt$variable, 
+                                levels = c("Celltype", "ClustSIGNAL", "BANKSY", 
+                                           "BASS", "SpatialPCA"))
+clustDF_melt$sample_comb <- paste0(clustDF_melt$Sample, "_", clustDF_melt$variable)
+clustDF_melt <- arrange(clustDF_melt, Sample)
+
+# reading clustering performance metrics from benchmarking
+metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics.Rds")
+
+# sub-setting metrics data from selected samples
+sub_metrics <- metrics[metrics$Sample %in% samples, c(1:6)]
+colnames(sub_metrics) <- c("Dataset", "Sample", "BASS", "BANKSY", "SpatialPCA",
+                           "ClustSIGNAL")
+sub_metrics <- reshape2::melt(sub_metrics)
+
+# setting points sizes for each dataset
+sampSize <- setNames(c(2.5, 1.5, 2, 3), samples)
+
+spatialPlots_list <- setNames(
+  lapply(samples, function(x) {
+    subDF_annot <- clustDF_melt[clustDF_melt$Sample == x & 
+                                  clustDF_melt$variable == "Celltype", ]
+    plt_annot <- subDF_annot %>%
+      ggplot(aes(x = x, y = -y, color = value)) +
+      geom_scattermore(pointsize = sampSize[x]) +
+      facet_wrap(vars(variable)) +
+      scale_color_manual(values = colors_annots) +
+      guides(colour = guide_legend(override.aes = list(size = 5))) +
+      theme_classic() +
+      theme(axis.text = element_blank(),
+            axis.title = element_blank(),
+            axis.ticks = element_blank(),
+            axis.line = element_blank(),
+            strip.background = element_blank(),
+            strip.text = element_text(size = 14),
+            legend.position = "None")
+    
+    subDF_clust <- clustDF_melt[clustDF_melt$Sample == x & 
+                                  clustDF_melt$variable != "Celltype", ]
+    sub_sub_metrics <- sub_metrics[sub_metrics$Sample == x, ]
+    fig_labels <- setNames(
+      paste(sub_sub_metrics$variable, " ARI:", round(sub_sub_metrics$value, 2)),
+      sub_sub_metrics$variable)
+    plt_clust <- subDF_clust %>%
+      ggplot(aes(x = x, y = -y, color = value)) +
+      geom_scattermore(pointsize = sampSize[x]) +
+      facet_wrap(vars(variable), nrow = 1, 
+                 labeller = labeller(variable = fig_labels)) +
+      scale_color_manual(values = colors) +
+      guides(colour = guide_legend(override.aes = list(size = 5))) +
+      theme_classic() +
+      theme(axis.text = element_blank(),
+            axis.title = element_blank(),
+            axis.ticks = element_blank(),
+            axis.line = element_blank(),
+            strip.background = element_blank(),
+            strip.text = element_text(size = 14),
+            legend.position = "None")
+    plt <- plt_annot + plt_clust + plot_layout(axes = "collect", 
+                                               widths = c(1, 4))
+    return(plt)
+  }), samples)
+
+# combining the spatial plots
+sp_plots_comb <- wrap_plots(spatialPlots_list, nrow = 4) + 
+  plot_layout(axes = "collect", guides = "collect", heights = c(5, 4, 4, 4))
+
+ggsave("./data_outputs/visuals/Bench_singleSamples_spPlots.pdf", 
+       plot = sp_plots_comb, width = 12, height = 10, units = "in")
+```
+
+# Panels e-g - performance metrics plots
+
+```{r}
+# Datasets: mouse embryo (ME), breast cancer (BR), lung cancer (LC),
+#   mouse hypothalamus (MH)
+# Metrics - ARI, runtime, memory usage
+
+# reading clustering performance metrics from benchmarking
+clust_metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics.Rds")
+
+# sub-setting ari columns
+ari_metrics <- clust_metrics[, c(1:6)]
+colnames(ari_metrics) <- c("Dataset", "Sample", "BASS", "BANKSY", "SpatialPCA",
+                           "ClustSIGNAL")
+
+# converting data frame into long format
+metrics_melt <- reshape2::melt(ari_metrics) %>%
+  mutate(variable = factor(variable, levels = c("ClustSIGNAL", "BANKSY", "BASS", 
+                                                "SpatialPCA")))
+metrics_melt$Dataset <- factor(metrics_melt$Dataset, 
+                               levels = c("ME", "BR", "LC", "MH"))
+
+ari_plot <- metrics_melt %>%
+  ggplot(aes(x = Dataset, y = value, group = interaction(Dataset, variable), 
+             colour = variable, fill = variable)) +
+  geom_boxplot(alpha = 0.8) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.2, 
+                                              dodge.width = 0.75), 
+              size = 0.5, alpha = 0.5) +
+  labs(x = "Dataset", y = "ARI") +
+  ylim(0, 0.8) +
+  scale_color_manual(values = methodColors) +
+  scale_fill_manual(values = methodColors) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.position = "none")
+```
+
+```{r}
+# reading computational performance outcomes from benchmarking
+compute_metrics <- readRDS("./data_outputs/benchmarkOut/compute_metrics.Rds")
+compute_metrics$Dataset <- factor(compute_metrics$Dataset, 
+                                  levels = c("ME", "BR", "LC", "MH"))
+
+# runtime plot
+runtime_plot <- compute_metrics %>%
+  ggplot(aes(x = Dataset, y = Elapsed_Time_sec/3600, group = Method, 
+             fill = Method)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = round(Elapsed_Time_sec/3600)), 
+            position = position_dodge(width = 0.9), vjust = -0.25, size = 3.5) +
+  labs(x = "Dataset", y = "Run time (hr)") +
+  scale_fill_manual(values = methodColors) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+# memory usage plot
+memUsage_plot <- compute_metrics %>%
+  ggplot(aes(x = Dataset, y = Peak_RAM_Used_MiB/1000, group = Method, 
+             fill = Method)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = round(Peak_RAM_Used_MiB/1000)), 
+            position = position_dodge(width = 0.9), vjust = -0.25, size = 3.5) +
+  labs(x = "Dataset", y = "Memory usage (Gb)") +
+  scale_fill_manual(values = methodColors) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+```
+
+```{r}
+# combining all metrics plots
+comb_resource_plot <- ari_plot + runtime_plot + memUsage_plot +
+  plot_layout(guides = "collect", ncol = 3, widths = c(1.5, 1, 1)) &
+  theme(legend.position = "bottom")
+
+ggsave("./data_outputs/visuals/Bench_metrics.pdf",
+       plot = comb_resource_plot, width = 12, height = 4, units = "in")
+```
