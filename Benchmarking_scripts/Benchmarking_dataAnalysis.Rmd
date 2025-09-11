@@ -1,0 +1,441 @@
+---
+title: "Benchmarking analysis of real world data"
+author: "Pratibha Panwar"
+date: "2025-09-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r}
+library(SpatialExperiment)
+library(dplyr)
+library(peakRAM)
+
+library(clustSIGNAL)
+
+library(Banksy)
+library(Seurat)
+library(harmony)
+library(tidyr)
+library(data.table)
+
+library(BASS)
+
+library(SpatialPCA)
+library(bluster)
+
+library(aricode)
+```
+
+# SeqFISH mouse embryo data
+
+Raw gene expression counts and metadata downloaded from [Spatial Mouse Atlas 2020](https://content.cruk.cam.ac.uk/jmlab/SpatialMouseAtlas2020/), and stored in a spe object.
+
+```{r}
+# loading method wrapper functions
+source("./scripts/benchmark_funcs.R")
+
+spe_me <- readRDS("./spe_mouseEmbryo.Rds") # spe object of downloaded data
+```
+
+```{r}
+#### data pre-processing ####
+
+# removing low quality cells
+spe_me <- spe_me[, spe_me$celltype_mapped_refined != "Low quality"]
+
+spe_me$celltype_mapped_refined <- factor(spe_me$celltype_mapped_refined)
+```
+
+```{r}
+#### ClustSIGNAL ####
+
+set.seed(567)
+mem_me_cSignal <- peakRAM(cSIGNAL_me <- clustSIGNAL(spe_me, samples = "embryo", 
+                                                    threads = 1, outputs = "a"))
+mem_me_cSignal <- cbind(mem_me_cSignal, Threads = 1, Batch_correct = FALSE,
+                        Batch_by = "None", Dataset = "ME", Method = "ClustSIGNAL")
+
+saveRDS(cSIGNAL_me$spe_final, file = "./data_outputs/benchmarkOut/spe_me_cSIGNAL.Rds")
+```
+
+```{r}
+#### Banksy ####
+
+mem_me_banksy <- peakRAM(banksy_me <- runBANKSY(
+    spe_me, SEED = 567, annots_label = "celltype_mapped_refined", 
+    sample_label = "embryo"))
+mem_me_banksy <- cbind(mem_me_banksy, Threads = 1, Batch_correct = FALSE,
+                       Batch_by = "None", Dataset = "ME", Method = "BANKSY")
+
+saveRDS(banksy_me, file = "./data_outputs/benchmarkOut/spe_me_banksy.Rds")
+```
+
+```{r}
+#### BASS ####
+
+# parameters:
+#   C - 23 cell types (based on manual annotations)
+#   R - 10 domains (randomly chosen value)
+#   counts list - cntm_me
+#   coordinates list - xym_me
+
+sampleNames <- unique(spe_me$embryo)
+cntm_me <- lapply(sampleNames, function(x) counts(spe_me[, spe_me$embryo == x]))
+xym_me <- lapply(sampleNames, function(x) spatialCoords(spe_me[, spe_me$embryo == x]))
+
+set.seed(567)
+mem_me_bass <- peakRAM(BASS_me <- runBASS(cntm_me, xym_me, C = 23, R = 10))
+mem_me_bass <- cbind(mem_me_bass, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "ME", Method = "BASS")
+
+saveRDS(BASS_me, file = "./data_outputs/benchmarkOut/BASSobj_me.Rds")
+```
+
+```{r}
+#### SpatialPCA ####
+
+set.seed(567)
+mem_me_sPCA <- peakRAM(sPCA_me <- runSpatialPCA(spe_me, samples = "embryo"))
+mem_me_sPCA <- cbind(mem_me_sPCA, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "ME", Method = "SpatialPCA")
+
+saveRDS(sPCA_me, file = "./data_outputs/benchmarkOut/clustList_me_sPCA.Rds")
+```
+
+
+# Xenium breast cancer data
+
+Raw gene expression counts and metadata downloaded from [10x Genomics website](https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast).\
+The data were stored as a MoleculeExperiment object, from which an spe object was generated. Cell type annotations were acquired from source data in [Janesick et al, 2023](https://www.nature.com/articles/s41467-023-43458-x).
+
+```{r}
+# loading method wrapper functions
+source("./scripts/benchmark_funcs.R")
+
+spe_br <- readRDS("./spe_breastCancer.Rds") # spe object of downloaded data
+```
+
+```{r}
+#### ClustSIGNAL ####
+set.seed(567)
+mem_br_cSignal <- peakRAM(cSIGNAL_br <- clustSIGNAL(spe_br, samples = "sample_id", 
+                                                    threads = 1, outputs = "a"))
+mem_br_cSignal <- cbind(mem_br_cSignal, Threads = 1, Batch_correct = FALSE,
+                        Batch_by = "None", Dataset = "BR", Method = "ClustSIGNAL")
+
+saveRDS(cSIGNAL_br$spe_final, file = "./data_outputs/benchmarkOut/spe_br_cSIGNAL.Rds")
+```
+
+```{r}
+#### Banksy ####
+
+mem_br_banksy <- peakRAM(banksy_br <- runBANKSY(
+    spe_br, SEED = 567, annots_label = "celltype", sample_label = "sample_id"))
+mem_br_banksy <- cbind(mem_br_banksy, Threads = 1, Batch_correct = FALSE,
+                       Batch_by = "None", Dataset = "BR", Method = "BANKSY")
+
+saveRDS(banksy_br, file = "./data_outputs/benchmarkOut/spe_br_banksy.Rds")
+```
+
+```{r}
+#### BASS ####
+
+# parameters:
+#   C - 19 cell types (based on manual annotations)
+#   R - 7 domains (based on Fig. 4d in Janesick et al, 2023)
+#   counts list - cntm_br
+#   coordinates list - xym_br
+
+sampleNames <- unique(spe_br$sample_id)
+cntm_br <- lapply(sampleNames, function(x) counts(spe_br[, spe_br$sample_id == x]))
+xym_br <- lapply(sampleNames, function(x) spatialCoords(spe_br[, spe_br$sample_id == x]))
+
+set.seed(567)
+mem_br_bass <- peakRAM(bass_br <- runBASS(cntm_br, xym_br, C = 19, R = 7))
+mem_br_bass <- cbind(mem_br_bass, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "BR", Method = "BASS")
+
+# Error: memory issue
+```
+
+```{r}
+#### SpatialPCA ####
+
+set.seed(567)
+mem_br_sPCA <- peakRAM(sPCA_br <- runSpatialPCA(spe_br, samples = "sample_id"))
+mem_br_sPCA <- cbind(mem_br_sPCA, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "BR", Method = "SpatialPCA")
+
+# Error: excessive runtime (> 5 days)
+```
+
+
+# CosMx lung cancer data 
+
+A giotto object of processed gene expression and metadata downloaded from 
+[Nanostring website](https://nanostring.com/products/cosmx-spatial-molecular-imager/ffpe-dataset/nsclc-ffpe-dataset/). The giotto object was converted to spe object.
+
+```{r}
+# loading method wrapper functions
+source("./scripts/benchmark_funcs.R")
+
+spe_lc <- readRDS("spe_lungNSCLC.Rds") # spe object of downloaded data
+```
+
+```{r}
+#### ClustSIGNAL ####
+
+# batch correction performed on patient group
+set.seed(567)
+mem_lc_cSignal <- peakRAM(cSIGNAL_lc <- clustSIGNAL(
+    spe_lc, samples = "Run_Tissue_name", threads = 1, batch = TRUE, 
+    batch_by = "patient", outputs = "a"))
+mem_lc_cSignal <- cbind(mem_lc_cSignal, Threads = 1, Batch_correct = TRUE,
+                        Batch_by = "patient", Dataset = "LC", Method = "ClustSIGNAL")
+
+saveRDS(cSIGNAL_lc$spe_final, file = "./data_outputs/benchmarkOut/spe_lc_cSIGNAL.Rds")
+```
+
+```{r}
+#### Banksy ####
+
+mem_lc_banksy <- peakRAM(banksy_lc <- runBANKSY(
+    spe_lc, SEED = 567, annots_label = "cell_type", 
+    sample_label = "Run_Tissue_name", batch = TRUE, batch_by = "patient"))
+mem_lc_banksy <- cbind(mem_lc_banksy, Threads = 1, Batch_correct = TRUE,
+                       Batch_by = "patient", Dataset = "LC", Method = "BANKSY")
+
+saveRDS(banksy_lc, file = "./data_outputs/benchmarkOut/spe_lc_banksy.Rds")
+```
+
+```{r}
+#### BASS ####
+
+# parameters:
+#   C - 22 cell types (based on manual annotations)
+#   R - 9 domains (based on niches in dataset)
+#   counts list - cntm_lc
+#   coordinates list - xym_lc
+
+sampleNames <- unique(spe_lc$Run_Tissue_name)
+cntm_lc <- lapply(sampleNames, 
+                  function(x) counts(spe_lc[, spe_lc$Run_Tissue_name == x]))
+xym_lc <- lapply(sampleNames, 
+                 function(x) spatialCoords(spe_lc[, spe_lc$Run_Tissue_name == x]))
+
+set.seed(567)
+mem_lc_bass <- peakRAM(bass_lc <- runBASS(cntm_lc, xym_lc, C = 22, R = 9))
+mem_lc_bass <- cbind(mem_lc_bass, Threads = 1, Batch_correct = NA,
+                     Batch_by = "None", Dataset = "LC", Method = "BASS")
+
+# Error: memory issue
+```
+
+```{r}
+#### SpatialPCA ####
+
+set.seed(567)
+mem_lc_sPCA <- peakRAM(sPCA_lc <- runSpatialPCA(spe_lc, samples = "Run_Tissue_name"))
+mem_lc_sPCA <- cbind(mem_lc_sPCA, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "LC", Method = "SpatialPCA")
+
+# Error: excessive runtime (> 4 days)
+```
+
+
+# MERFISH mouse hypothalamus
+
+Raw gene expression counts and metadata downloaded from [DRYAD website](https://datadryad.org/dataset/doi:10.5061/dryad.8t8s248), and stored 
+in a spe object. Only the 135 genes that were profiled on MERFISH were kept.
+
+```{r}
+# loading method wrapper functions
+source("./scripts/benchmark_funcs.R")
+
+spe_mh <- readRDS("./spe_mouseHypothal.Rds") # spe object of downloaded data
+```
+
+```{r}
+#### data pre-processing ####
+
+# removing ambiguous cells - possible doublets
+spe_mh <- spe_mh[, spe_mh$Cell_class != "Ambiguous"]
+
+spe_mh$Cell_class <- factor(spe_mh$Cell_class)
+```
+
+```{r}
+#### ClustSIGNAL ####
+
+set.seed(567)
+mem_mh_cSignal <- peakRAM(cSIGNAL_mh <- clustSIGNAL(spe_mh, samples = "samples", 
+                                                    threads = 1, outputs = "a"))
+mem_mh_cSignal <- cbind(mem_mh_cSignal, Threads = 1, Batch_correct = FALSE,
+                        Batch_by = "None", Dataset = "MH", Method = "ClustSIGNAL")
+
+saveRDS(cSIGNAL_mh$spe_final, file = "./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
+```
+
+```{r}
+#### Banksy ####
+mem_mh_banksy <- peakRAM(banksy_mh <- runBANKSY(
+    spe_mh, SEED = 567, annots_label = "Cell_class", sample_label = "samples"))
+mem_mh_banksy <- cbind(mem_mh_banksy, Threads = 1, Batch_correct = FALSE,
+                       Batch_by = "None", Dataset = "MH", Method = "BANKSY")
+
+saveRDS(banksy_mh, file = "./data_outputs/benchmarkOut/spe_mh_banksy.Rds")
+```
+
+```{r}
+#### BASS ####
+
+# parameters:
+#   C - 16 cell types (based on manual annotations)
+#   R - 9 domains (based on Fig. 3e in Moffitt et al, 2018)
+#   counts list - cntm_mh
+#   coordinates list - xym_mh
+
+sampleNames <- unique(spe_mh$samples)
+cntm_mh <- lapply(sampleNames, 
+                  function(x) counts(spe_mh[, spe_mh$samples == x]))
+xym_mh <- lapply(sampleNames, 
+                 function(x) spatialCoords(spe_mh[, spe_mh$samples == x]))
+
+set.seed(567)
+mem_mh_bass <- peakRAM(bass_mh <- runBASS(cntm_mh, xym_mh, C = 16, R = 9))
+mem_mh_bass <- cbind(mem_mh_bass, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "MH", Method = "BASS")
+
+saveRDS(bass_mh, file = "./data_outputs/benchmarkOut/BASSobj_mh.Rds")
+```
+
+```{r}
+#### SpatialPCA ####
+
+set.seed(567)
+mem_mh_sPCA <- peakRAM(sPCA_mh <- runSpatialPCA(spe_mh, samples = "samples"))
+mem_mh_sPCA <- cbind(mem_mh_sPCA, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "MH", Method = "SpatialPCA")
+
+saveRDS(sPCA_mh, file = "./data_outputs/benchmarkOut/clustList_mh_sPCA.Rds")
+```
+
+
+# Combining benchmarking data
+
+```{r}
+#### clusters ####
+
+# clusters from runs on mouse embryo data
+clustDF_me <- data.frame(Dataset = "ME",
+                         Cells = colnames(spe_me), 
+                         Sample = spe_me$embryo,
+                         x = spatialCoords(spe_me)[, 1],
+                         y = spatialCoords(spe_me)[, 2],
+                         Celltype = spe_me$celltype_mapped_refined,
+                         BASS = unlist(BASS_me@results$c) |> factor(),
+                         BANKSY = banksy_me$clust_M1_lam0.2_k50_res1,
+                         SpatialPCA = factor(unlist(sPCA_me), 
+                                             levels = c(1:22, "Unlabelled")),
+                         ClustSIGNAL = cSIGNAL_me$spe_final$ClustSIGNAL)
+# clusters from runs on breast cancer data
+clustDF_br <- data.frame(Dataset = "BR",
+                         Cells = colnames(spe_br), 
+                         Sample = spe_br$sample_id,
+                         x = spatialCoords(spe_br)[, 1],
+                         y = spatialCoords(spe_br)[, 2],
+                         Celltype = spe_br$celltype,
+                         BASS = "NA",
+                         BANKSY = banksy_br$clust_M1_lam0.2_k50_res1,
+                         SpatialPCA = "NA",
+                         ClustSIGNAL = cSIGNAL_br$spe_final$ClustSIGNAL)
+# clusters from runs on lung cancer data
+clustDF_lc <- data.frame(Dataset = "LC",
+                         Cells = colnames(spe_lc), 
+                         Sample = spe_lc$Run_Tissue_name,
+                         x = spatialCoords(spe_lc)[, 1],
+                         y = spatialCoords(spe_lc)[, 2],
+                         Celltype = spe_lc$cell_type,
+                         BASS = "NA",
+                         BANKSY = banksy_lc$clust_PCA_harmony_k50_res1,
+                         SpatialPCA = "NA",
+                         ClustSIGNAL = cSIGNAL_lc$spe_final$ClustSIGNAL)
+# clusters from runs on mouse hypothalamus data
+clustDF_mh <- data.frame(Dataset = "MH",
+                         Cells = colnames(spe_mh), 
+                         Sample = spe_mh$samples,
+                         x = spatialCoords(spe_mh)[, 1],
+                         y = spatialCoords(spe_mh)[, 2],
+                         Celltype = spe_mh$Cell_class,
+                         BASS = unlist(bass_mh@results$c) |> factor(),
+                         BANKSY = banksy_mh$clust_M1_lam0.2_k50_res1,
+                         SpatialPCA = factor(unlist(sPCA_mh),
+                                             levels = c(1:12, "Unlabelled")),
+                         ClustSIGNAL = cSIGNAL_mh$spe_final$ClustSIGNAL)
+# all cluster data combined
+clustDF <- rbind(clustDF_me, clustDF_br, clustDF_mh, clustDF_lc)
+saveRDS(clustDF, "./data_outputs/benchmarkOut/BenchDF.Rds")
+```
+
+```{r}
+#### clustering performance metrics ####
+
+metrics <- clustDF %>% 
+    group_by(Dataset, Sample) %>% # for each sample in each dataset
+    summarise(BASS_ari = ARI(Celltype, BASS), # BASS ari
+              BANKSY_ari = ARI(Celltype, BANKSY), # BANKSY ari
+              SpatialPCA_ari = ARI(Celltype, SpatialPCA), # SpatialPCA ari
+              ClustSIGNAL_ari = ARI(Celltype, ClustSIGNAL), # ClustSIGNAL ari
+              Annotation_clust = length(unique(Celltype)), # total annotations
+              BASS_clust = length(unique(BASS)), # total BASS clusters
+              BANKSY_clust = length(unique(BANKSY)), # total BANKSY clusters
+              SpatialPCA_clust = length(unique(SpatialPCA)), # total SpatialPCA clusters
+              ClustSIGNAL_clust = length(unique(ClustSIGNAL)) # total ClustSIGNAL clusters
+    )  %>% 
+    as.data.frame()
+saveRDS(metrics, "./data_outputs/benchmarkOut/clustering_metrics.Rds")
+```
+
+
+```{r}
+#### computational performance metrics ####
+
+# combining all memory usage and runtime data
+all_resources <- rbind(mem_me_banksy, mem_me_bass, mem_me_cSIGNAL, mem_me_sPCA,
+                       mem_br_banksy, mem_br_cSIGNAL, 
+                       mem_lc_banksy, mem_lc_cSIGNAL,
+                       mem_mh_banksy, mem_mh_bass, mem_mh_cSIGNAL, mem_mh_sPCA)
+all_resources <- all_resources[, -c(1)] # removing generic function column
+all_resources$Method <- factor(all_resources$Method, 
+                               levels = c("ClustSIGNAL", "BANKSY", "BASS",
+                                          "SpatialPCA"))
+
+# all combinations of dataset and methods that worked
+data_comb <- paste(all_resources$Dataset, all_resources$Method, sep = "_")
+# calculating average ARI per dataset and method combination
+all_resources$avg_ari <- lapply(data_comb, function(x) {
+  dataset <- str_split_i(x, pattern = "_", i = 1)
+  method <- str_split_i(x, pattern = "_", i = 2)
+  columnName <- colnames(metrics)[startsWith(colnames(metrics), method)]
+  metrics[metrics$Dataset == dataset, columnName] |> mean()
+}) |> unlist()
+
+# adding column for number of cells in a dataset
+all_resources$Cells <- vapply(data_comb, function(x) {
+  dataset <- str_split_i(x, pattern = "_", i = 1)
+  table(clustDF$Dataset)[dataset]
+}, FUN.VALUE = integer(1))
+# adding column of characters representing number of cells in a dataset
+all_resources$CellNum <- paste0(round(all_resources$Cells / 1000), "k") |> 
+  factor(levels = c("53k", "275k", "771k", "875k"))
+
+saveRDS(all_resources, "./data_outputs/benchmarkOut/compute_metrics.Rds")
+```
