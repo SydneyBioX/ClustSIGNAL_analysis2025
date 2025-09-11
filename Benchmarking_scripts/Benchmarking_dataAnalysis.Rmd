@@ -63,6 +63,7 @@ mem_me_cSignal <- peakRAM(cSIGNAL_me <- clustSIGNAL(spe_me, samples = "embryo",
 mem_me_cSignal <- cbind(mem_me_cSignal, Threads = 1, Batch_correct = FALSE,
                         Batch_by = "None", Dataset = "ME", Method = "ClustSIGNAL")
 
+saveRDS(cSIGNAL_me, file = "./data_outputs/benchmarkOut/res_me_cSIGNAL.Rds")
 saveRDS(cSIGNAL_me$spe_final, file = "./data_outputs/benchmarkOut/spe_me_cSIGNAL.Rds")
 ```
 
@@ -131,6 +132,7 @@ mem_br_cSignal <- peakRAM(cSIGNAL_br <- clustSIGNAL(spe_br, samples = "sample_id
 mem_br_cSignal <- cbind(mem_br_cSignal, Threads = 1, Batch_correct = FALSE,
                         Batch_by = "None", Dataset = "BR", Method = "ClustSIGNAL")
 
+saveRDS(cSIGNAL_br, file = "./data_outputs/benchmarkOut/res_br_cSIGNAL.Rds")
 saveRDS(cSIGNAL_br$spe_final, file = "./data_outputs/benchmarkOut/spe_br_cSIGNAL.Rds")
 ```
 
@@ -201,6 +203,7 @@ mem_lc_cSignal <- peakRAM(cSIGNAL_lc <- clustSIGNAL(
 mem_lc_cSignal <- cbind(mem_lc_cSignal, Threads = 1, Batch_correct = TRUE,
                         Batch_by = "patient", Dataset = "LC", Method = "ClustSIGNAL")
 
+saveRDS(cSIGNAL_lc, file = "./data_outputs/benchmarkOut/res_lc_cSIGNAL.Rds")
 saveRDS(cSIGNAL_lc$spe_final, file = "./data_outputs/benchmarkOut/spe_lc_cSIGNAL.Rds")
 ```
 
@@ -281,6 +284,7 @@ mem_mh_cSignal <- peakRAM(cSIGNAL_mh <- clustSIGNAL(spe_mh, samples = "samples",
 mem_mh_cSignal <- cbind(mem_mh_cSignal, Threads = 1, Batch_correct = FALSE,
                         Batch_by = "None", Dataset = "MH", Method = "ClustSIGNAL")
 
+saveRDS(cSIGNAL_mh, file = "./data_outputs/benchmarkOut/res_mh_cSIGNAL.Rds")
 saveRDS(cSIGNAL_mh$spe_final, file = "./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
 ```
 
