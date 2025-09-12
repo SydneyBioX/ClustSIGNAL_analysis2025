@@ -23,3 +23,9 @@ This repository contains code for data analysis and figures reported in the manu
     -   Fig3_benchmarking: benchmarking figure panels.
 
     -   Fig4_dataAnalysis: data analysis figure panels, and related analyses.
+
+-   Supplementary materials - see Supplementary folder.
+
+    -   Suppl_analysis: entropy analysis.
+
+    -   Suppl_figs: supplementary figures.
