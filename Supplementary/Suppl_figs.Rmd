@@ -1,0 +1,1815 @@
+---
+title: "Supplementary figures"
+author: "Pratibha Panwar"
+date: "2025-09-11"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading libraries
+
+```{r}
+library(SpatialExperiment)
+library(dplyr)
+library(scran)
+library(reshape2)
+
+library(scater)
+library(ggplot2)
+library(patchwork)
+
+library(circlize)
+library(ComplexHeatmap)
+
+library(org.Hs.eg.db)
+library(AnnotationDbi)
+library(clusterProfiler)
+```
+
+# Suppl Fig. 1
+
+```{r}
+# neighbourhood size colors
+NN_colors <- setNames(c("grey10", "grey30", "red", "grey50", "grey70"), 
+                      seq(10, 50, 10))
+
+# initial clustering method colors
+clustAlgo_colors <- setNames(c("red", "grey50", "grey70", "grey30"), 
+                             c("louvain", "walktrap", "infomap", "label_prop"))
+```
+
+```{r}
+#### panel a - parameter testing part 1
+
+# reading outcome of parameter testing 1
+ari_param1_df <- readRDS("./data_outputs/simDataOut/ari_paramTest1_iter20.Rds")
+
+# calculating mean number of clusters identified for each combination of 
+# dataset and parameter combination
+ari_summary1 <- ari_param1_df %>% group_by(Pattern, NN, spread, kernel) %>%
+  summarise(meanClustNum = round(mean(Clusters)), .groups = "drop") %>%
+  as.data.frame() %>%
+  mutate(ClusterVar = 
+           ifelse(Pattern == "Patched", # 9 labels in Patched
+                  meanClustNum - 9,
+                  ifelse(Pattern == "Gradient", # 14 labels in Gradient
+                         meanClustNum - 14,
+                         ifelse(Pattern == "Complex", # 12 labels in
+                                meanClustNum - 12, # Complex
+                                meanClustNum - 12)))) # Uniform
+
+ari_summary1$NN <- factor(ari_summary1$NN)
+ari_summary1$spread <- factor(ari_summary1$spread)
+# arranging patterns from high to low spatial structure
+ari_summary1$Pattern <- factor(ari_summary1$Pattern, 
+                               levels = c( "Patched", "Gradient", 
+                                           "Complex", "Uniform"))
+ari_summary1$kernel <- factor(ari_summary1$kernel, levels = c("G", "E"))
+
+panel_a <- ggplot(ari_summary1, aes(x = spread, y = ClusterVar,
+                                    group = NN, colour = NN, shape = NN)) +
+  geom_abline(intercept = 0, slope = 0, colour = "black", linetype = "dashed") +
+  geom_line(linewidth = 0.5) +
+  geom_point(size = 1.5) +
+  facet_wrap(vars(Pattern, kernel), ncol = 2, axes = "all_x",
+             labeller = labeller(kernel = label_both)) +
+  scale_color_manual(values = NN_colors) +
+  scale_y_continuous(breaks = seq(min(ari_summary1$ClusterVar), 
+                                  max(ari_summary1$ClusterVar), 2)) +
+  labs(x = "Distribution spread (spread)", 
+       y = "Cluster number variation compared to ground truth", 
+       colour = "Neighbourhood\nsize", 
+       shape = "Neighbourhood\nsize") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text = element_blank(),
+        axis.title = element_text(size = 12))
+```
+
+```{r}
+#### panel b - parameter testing part 2
+
+# reading outcome of parameter testing 2
+ari_param2_df <- readRDS("./data_outputs/simDataOut/ari_paramTest2_iter20.Rds")
+
+# calculating mean number of clusters identified for each combination of 
+# dataset and parameter combination
+ari_summary2 <- ari_param2_df %>% 
+  group_by(Pattern, sort, k_centroids, clusteringMethod) %>%
+  summarise(meanClustNum = round(mean(Clusters)), .groups = "drop") %>% 
+  as.data.frame() %>%
+  mutate(ClusterVar = 
+           ifelse(Pattern == "Patched", # 9 labels in Patched
+                  meanClustNum - 9,
+                  ifelse(Pattern == "Gradient", # 14 labels in Gradient
+                         meanClustNum - 14,
+                         ifelse(Pattern == "Complex", # 12 labels in
+                                meanClustNum - 12, # Complex
+                                meanClustNum - 12)))) # Uniform
+
+ari_summary2$k_centroids <- factor(ari_summary2$k_centroids)
+ari_summary2$sort <- factor(ari_summary2$sort, levels = c("TRUE", "FALSE"))
+# arranging patterns from high to low spatial structure
+ari_summary2$Pattern <- factor(ari_summary2$Pattern, 
+                               levels = c( "Patched", "Gradient", 
+                                           "Complex", "Uniform"))
+ari_summary2$clusteringMethod <- factor(ari_summary2$clusteringMethod, 
+                                        levels = c("louvain", "walktrap", 
+                                                   "infomap", "label_prop"))
+panel_b <- ggplot(ari_summary2, aes(x = k_centroids, y = ClusterVar,
+                                    group = clusteringMethod, 
+                                    colour = clusteringMethod,
+                                    shape = clusteringMethod)) +
+  geom_abline(intercept = 0, slope = 0, colour = "black", linetype = "dashed") +
+  geom_line(linewidth = 0.5) +
+  geom_point(size = 1.5) +
+  facet_wrap(vars(Pattern, sort), ncol = 2, axes = "all_x",
+             labeller = labeller(sort = label_both)) +
+  scale_color_manual(values = clustAlgo_colors) +
+  scale_y_continuous(breaks = seq(-15, 35, 5)) +
+  guides(color = guide_legend(title.position = "top")) +
+  labs(x = "Number of nearest neighbours (k)", 
+       y = "Cluster number variation compared to ground truth", 
+       colour = "Clustering method", shape = "Clustering method") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.text = element_blank(),
+        axis.title = element_text(size = 12),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.position = "bottom")
+
+```
+
+# Suppl Figs. 2-13
+
+```{r}
+# color panel
+colors <- setNames(c("#635547", "#8EC792", "#9e6762", "#FACB12", "#3F84AA", 
+                     "#0F4A9C", "#EF5A9D", "#C594BF", "#ff891c", "#DFCDE4", 
+                     "#139992", "#65A83E", "#005579", "#8DB5CE", "#C72228", 
+                     "#B51D8D", "#532C8A", "#8870ad", "#cc7818", "#FBBE92", 
+                     "#EF4E22", "#f9decf", "#c9a997", "#C9EBFB", "#f79083", 
+                     "#F397C0", "#DABE99", "#c19f70", "#354E23", "#C3C388",
+                     "grey95", "white"), 
+                   c(1:30, "Unlabelled", "NA"))
+
+
+# reading clustering performance metrics from benchmarking
+metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics.Rds")
+
+
+# reading clustering outcome from benchmarking
+clustDF <- readRDS("./data_outputs/benchmarkOut/BenchDF.Rds")
+
+# mouse embryo dataset clusters
+clustDF_me <- clustDF[clustDF$Dataset == "ME", ]
+
+# breast cancer dataset clusters
+clustDF_br <- clustDF[clustDF$Dataset == "BR", ]
+
+# lung cancer dataset clusters
+clustDF_lc <- clustDF[clustDF$Dataset == "LC", ]
+
+# mouse hypothalamus dataset clusters
+clustDF_mh <- clustDF[clustDF$Dataset == "MH", ]
+
+```
+
+```{r}
+#### function for aligning and adding sample ARI to plot labels
+
+ari_label <- function(metrics, colName) {
+  ari_vals <- setNames(
+    paste(metrics$Sample, " ARI:", round(metrics[[colName]], 2)),
+    metrics$Sample)
+  return(ari_vals)
+}
+```
+
+## 2-5 ClustSIGNAL
+
+```{r}
+#### SeqFISH mouse embryo
+
+me_cSIGNAL <- ggplot(clustDF_me, aes(x = x, y = -y, color = ClustSIGNAL)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free", 
+             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "ClustSIGNAL") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### Xenium breast cancer
+
+br_cSIGNAL <- ggplot(clustDF_br, aes(x = x, y = -y, color = ClustSIGNAL)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 1, 
+             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "ClustSIGNAL") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### CosMx lung cancer
+
+lc_cSIGNAL <- ggplot(clustDF_lc, aes(x = x, y = -y, color = ClustSIGNAL)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 3,
+             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "ClustSIGNAL") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### MERFISH mouse hypothalamus
+
+mh_cSIGNAL <- ggplot(clustDF_mh, aes(x = x, y = -y, color = ClustSIGNAL)) +
+  geom_scattermore(pointsize = 4) +
+  facet_wrap(~Sample, scales = "free", ncol = 12, 
+             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "ClustSIGNAL") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+```
+
+## 6-9 BANKSY
+
+```{r}
+#### SeqFISH mouse embryo
+
+me_banksy <- ggplot(clustDF_me, aes(x = x, y = -y, color = BANKSY)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 3)) +
+  labs(color = "BANKSY") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### Xenium breast cancer
+
+br_banksy <- ggplot(clustDF_br, aes(x = x, y = -y, color = BANKSY)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 1, 
+             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "BANKSY") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+#### CosMx lung cancer
+
+lc_banksy <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BANKSY)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 3,
+             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "BANKSY") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### MERFISH mouse hypothalamus
+
+mh_banksy <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BANKSY)) +
+  geom_scattermore(pointsize = 4) +
+  facet_wrap(~Sample, scales = "free", ncol = 12, 
+             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "BANKSY") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+```
+
+## 10-11 BASS
+
+```{r}
+#### SeqFISH mouse embryo
+
+me_bass <- ggplot(clustDF_me, aes(x = x, y = -y, color = BASS)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = labeller(Sample = ari_label(metrics, "BASS_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "BASS") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### MERFISH mouse hypothalamus
+
+mh_bass <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BASS)) +
+  geom_scattermore(pointsize = 4) +
+  facet_wrap(~Sample, scales = "free", ncol = 12, 
+             labeller = labeller(Sample = ari_label(metrics, "BASS_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "BASS") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+```
+
+## 12-13 SpatialPCA
+
+```{r}
+#### SeqFISH mouse embryo
+
+sp_sPCA <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpatialPCA)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = labeller(Sample = ari_label(metrics, "SpatialPCA_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "SpatialPCA") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+
+#### MERFISH mouse hypothalamus
+
+sp_sPCA <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpatialPCA)) +
+  geom_scattermore(pointsize = 4) +
+  facet_wrap(~Sample, scales = "free", ncol = 12, 
+             labeller = labeller(Sample = ari_label(metrics, "SpatialPCA_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "SpatialPCA") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+```
+
+# Suppl Figs. 14
+
+```{r}
+# reading computing performance metrics from benchmarking
+all_resources <- readRDS("./data_outputs/benchmarkOut/compute_metrics.Rds")
+
+all_resPlot <- all_resources %>%
+  ggplot(aes(x = Elapsed_Time_sec/3600, y = Peak_RAM_Used_MiB/1000, 
+             shape = Method, colour = avg_ari, size = Cells/1000)) +
+  geom_point() +
+  scale_color_continuous(low = "black", high = "red", 
+                         limits = c(min(all_resources$avg_ari),
+                                    max(all_resources$avg_ari))) +
+  scale_shape_manual(values = c("ClustSIGNAL" = 18, "Banksy" = 19, 
+                                "BASS" = 17, "SpatialPCA" = 15)) +
+  labs(x = "Run time (hr)", y = "Memory usage (Gb)", colour = "Mean ARI",
+       shape = "Method", size = "Cells \n(in thousands)") +
+  scale_size_continuous(range = c(3, 10)) + 
+  guides(shape = guide_legend(override.aes = list(size = 5))) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+```
+
+# Suppl Figs. 15
+
+```{r}
+# reading spe object with ClustSIGNAL clusters
+spe_me <- readRDS("./data_outputs/benchmarkOut/spe_me_cSIGNAL.Rds")
+
+guttube_clusters <- c(4, 14)
+
+neural_clusters <- c(20, 22)
+
+spinalcord_clusters <- c(3, 21)
+```
+
+```{r}
+#### panel a - spatial plots of gut tube region and clusters
+
+# spatial plots highlighting Gut tube region
+annotToplot <- ifelse(spe_me$celltype_mapped_refined == "Gut tube",
+                      "Gut tube", "Others")
+gut_annot <- plotReducedDim(spe_me, dimred = "spatial", 
+                            color_by = I(annotToplot), point_size = 3, 
+                            point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", 
+                                "Gut tube" = "#139992")) +
+  facet_wrap(~spe_me$embryo, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+# spatial plots highlighting Gut tube clusters
+clustToplot <- ifelse(spe_me$ClustSIGNAL %in% guttube_clusters, 
+                      spe_me$ClustSIGNAL, "Others")
+gut_clust <- plotReducedDim(spe_me, dimred = "spatial", 
+                            color_by = I(clustToplot), point_size = 3, 
+                            point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_me$embryo, scales = "free") +
+  scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#65A83E"), 
+                                       c("Others", guttube_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+# combining spatial plots
+comb_gut_plot <- gut_annot / gut_clust + plot_layout(guides = "collect")
+```
+
+```{r}
+#### panel b - top markers of Gut tube clusters
+
+spe_me_sub <- spe_me[, spe_me$ClustSIGNAL %in% guttube_clusters]
+markers <- findMarkers(spe_me_sub, test.type = "t", 
+                       groups = as.character(spe_me_sub$ClustSIGNAL))
+
+top_me_markers <- lapply(markers, function(x) {
+  imp_markers <- x[x$FDR < 0.05,]
+  return(rownames(imp_markers)[1:10])}) |> 
+  unlist() |> unique()
+gexp_me_marker <- logcounts(spe_me_sub)[top_me_markers, ] |> 
+  as.matrix() |> t() |> as.data.frame()
+gexp_me_marker$cluster <- factor(as.character(spe_me_sub$ClustSIGNAL))
+gexp_me_marker_melt <- reshape2::melt(gexp_me_marker, id.vars = "cluster", 
+                                      variable.name = "gene", 
+                                      value.name = "expression")
+
+summary_data <- gexp_me_marker_melt %>%
+  group_by(cluster, gene) %>%
+  summarise(meanExpression = mean(expression),
+            PerctageCells = sum(expression > 0) / n() * 100)
+
+markerPlot_gut <- summary_data %>%
+  ggplot(aes(x = cluster, y = gene, size = PerctageCells, 
+             color = meanExpression)) +
+  geom_point() +
+  scale_size_continuous(limit = c(0, 100), range = c(0, 5)) + 
+  scale_color_gradient(low = "white", high = "darkblue") + 
+  labs(x = "Gut tube clusters", y = "Genes", color = "Average\nexpression", 
+       size = "Percentage\ncells\nexpressed") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) 
+```
+
+```{r}
+#### panel c - spatial plots of Neural crest region and clusters
+
+# spatial plots highlighting Neural crest region
+annotToplot <- ifelse(spe_me$celltype_mapped_refined == "Neural crest",
+                      "Neural crest", "Others")
+crest_annot <- plotReducedDim(spe_me, dimred = "spatial", 
+                              color_by = I(annotToplot), point_size = 3, 
+                              point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", 
+                                "Neural crest" = "#139992")) +
+  facet_wrap(~spe_me$embryo, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+# spatial plots highlighting Neural crest clusters
+clustToplot <- ifelse(spe_me$ClustSIGNAL %in% neural_clusters, 
+                      spe_me$ClustSIGNAL, "Others")
+crest_clust <- plotReducedDim(spe_me, dimred = "spatial", 
+                              color_by = I(clustToplot), point_size = 3, 
+                              point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_me$embryo, scales = "free") +
+  scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#65A83E"), 
+                                       c("Others", neural_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+# combining spatial plots
+comb_crest_plot <- crest_annot / crest_clust + plot_layout(guides = "collect")
+```
+
+```{r}
+#### panel d - top markers of Neural crest clusters
+
+spe_me_sub <- spe_me[, spe_me$ClustSIGNAL %in% neural_clusters]
+markers <- findMarkers(spe_me_sub, test.type = "t", 
+                       groups = as.character(spe_me_sub$ClustSIGNAL))
+
+top_me_markers <- lapply(markers, function(x) {
+  imp_markers <- x[x$FDR < 0.05,]
+  return(rownames(imp_markers)[1:10])}) |> 
+  unlist() |> unique()
+gexp_me_marker <- logcounts(spe_me_sub)[top_me_markers, ] |> as.matrix() |> 
+  t() |> as.data.frame()
+gexp_me_marker$cluster <- factor(as.character(spe_me_sub$ClustSIGNAL))
+gexp_me_marker_melt <- reshape2::melt(gexp_me_marker, id.vars = "cluster", 
+                                      variable.name = "gene", 
+                                      value.name = "expression")
+
+summary_data <- gexp_me_marker_melt %>%
+  group_by(cluster, gene) %>%
+  summarise(
+    meanExpression = mean(expression),
+    PerctageCells = sum(expression > 0) / n() * 100)
+
+markerPlot_neural <- summary_data %>%
+  ggplot(aes(x = cluster, y = gene, size = PerctageCells, 
+             color = meanExpression)) +
+  geom_point() +
+  scale_size_continuous(limit = c(0, 100), range = c(0, 5)) +
+  scale_color_gradient(low = "white", high = "darkblue") + 
+  labs(x = "Neural crest clusters", y = "Genes", color = "Average\nexpression", 
+       size = "Percentage\ncells\nexpressed") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        plot.title = element_text(size = 14),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) 
+```
+
+```{r}
+#### panel c - spatial plots of Spinal cord region and clusters
+
+# spatial plots highlighting Spinal cord region
+annotToplot <- ifelse(spe_me$celltype_mapped_refined == "Spinal cord",
+                      "Spinal cord", "Others")
+spinal_annot <- plotReducedDim(spe_me, dimred = "spatial", 
+                               color_by = I(annotToplot), point_size = 3, 
+                               point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", 
+                                "Spinal cord" = "#139992")) +
+  facet_wrap(~spe_me$embryo, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+# spatial plots highlighting Spinal cord clusters
+clustToplot <- ifelse(spe_me$ClustSIGNAL %in% spinalcord_clusters, 
+                      spe_me$ClustSIGNAL, "Others")
+spinal_clust <- plotReducedDim(spe_me, dimred = "spatial", 
+                               color_by = I(clustToplot), point_size = 3, 
+                               point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_me$embryo, scales = "free") +
+  scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#65A83E"), 
+                                       c("Others", spinalcord_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+```
+
+```{r}
+#### panel d - top markers of Spinal cord clusters
+
+spe_me_sub <- spe_me[, spe_me$ClustSIGNAL %in% spinalcord_clusters]
+markers <- findMarkers(spe_me_sub, test.type = "t", 
+                       groups = as.character(spe_me_sub$ClustSIGNAL))
+
+top_me_markers <- lapply(markers, function(x) {
+  imp_markers <- x[x$FDR < 0.05,]
+  return(rownames(imp_markers)[1:10])}) |> 
+  unlist() |> unique()
+gexp_me_marker <- logcounts(spe_me_sub)[top_me_markers, ] |> as.matrix() |> 
+  t() |> as.data.frame()
+gexp_me_marker$cluster <- factor(as.character(spe_me_sub$ClustSIGNAL))
+gexp_me_marker_melt <- reshape2::melt(gexp_me_marker, id.vars = "cluster", 
+                                      variable.name = "gene", 
+                                      value.name = "expression")
+
+summary_data <- gexp_me_marker_melt %>%
+  group_by(cluster, gene) %>%
+  summarise(
+    meanExpression = mean(expression),
+    PerctageCells = sum(expression > 0) / n() * 100)
+
+markerPlot_spinal <- summary_data %>%
+  ggplot(aes(x = cluster, y = gene, size = PerctageCells, 
+             color = meanExpression)) +
+  geom_point() +
+  scale_size_continuous(limits = c(0, 100), range = c(0, 5)) +
+  scale_color_gradient(low = "white", high = "darkblue") + 
+  labs(x = "Spinal cord clusters", y = "Genes", color = "Average\nexpression", 
+       size = "Percentage\ncells\nexpressed") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) 
+```
+
+# Suppl Figs. 16-17
+
+```{r}
+# reading spe object with ClustSIGNAL clusters
+spe_mh <- readRDS("./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
+
+# clusters associated with inhibitory and excitatory neurons
+inhibitory_clusters <- c(8, 3, 4, 9)
+excitatory_clusters <- c(14, 11, 5)
+
+# colors
+inhib_colors <- setNames(c("#9DD84A", "#9e6762", "#E1C239", "#ff891c", "grey95"), 
+                         c(inhibitory_clusters, "Others"))
+excit_colors <- setNames(c("#532C8A", "#B51D8D", "#139992", "grey95"), 
+                         c(excitatory_clusters, "Others"))
+```
+
+```{r}
+#### Suppl Fig. 16 - excitatory neurons
+
+clustToplot_excit <- ifelse(spe_mh$ClustSIGNAL %in% excitatory_clusters, 
+                            spe_mh$ClustSIGNAL, "Others")
+excit_clust <- plotReducedDim(spe_mh, dimred = "spatial", 
+                              color_by = I(clustToplot_excit), point_size = 4, 
+                              point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_mh$samples, scales = "free", ncol = 12) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Excitatory\nclusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+```
+
+```{r}
+#### Suppl Fig. 16 - inhibitory neurons 
+
+clustToplot_inhib <- ifelse(spe_mh$ClustSIGNAL %in% inhibitory_clusters, 
+                            spe_mh$ClustSIGNAL, "Others")
+inhib_clust <- plotReducedDim(spe_mh, dimred = "spatial", 
+                              color_by = I(clustToplot_inhib), point_size = 4, 
+                              point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_mh$samples, scales = "free", ncol = 12) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Inhibitory\nclusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+```
+
+# Suppl Fig. 18
+
+```{r}
+# reading spe object with ClustSIGNAL clusters
+spe_br <- readRDS("./data_outputs/benchmarkOut/spe_br_cSIGNAL.Rds")
+
+invasive_clusters <- c(13, 2, 14)
+
+dcis_clusters <- c(12, 9, 15)
+```
+
+```{r}
+#### panel a - spatial plots of annotation and ClustSIGNAL clusters
+
+# annotation spatial plot
+br_annot <- plotReducedDim(spe_br, dimred = "spatial", point_size = 1.5, 
+                           color_by = "celltype", point_alpha = 1, 
+                           scattermore = TRUE) +
+  scale_color_manual(values = colors) +
+  facet_wrap(~spe_br$sample_id, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 3)) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+br_clust <- plotReducedDim(spe_br, dimred = "spatial", point_size = 1.5, 
+                           color_by = "ClustSIGNAL", point_alpha = 1, 
+                           scattermore = TRUE) +
+  scale_color_manual(values = colors) +
+  facet_wrap(~spe_br$sample_id, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 2)) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+br_out <- br_annot / br_clust + plot_layout(guides = "collect")
+```
+
+```{r}
+#### panel b - composition of ClustSIGNAL clusters 
+
+cellMatrix <- as.matrix(table(spe_br$celltype, spe_br$ClustSIGNAL))
+
+# normalising values by number of cells in a cluster
+cellMatrix_norm <- sweep(cellMatrix, 2, colSums(cellMatrix), FUN = "/") 
+
+col_func <- colorRamp2(seq(min(cellMatrix_norm),
+                           max(cellMatrix_norm), length = 3),
+                       c("aliceblue", "#bb0c00", "darkred"))
+# ordering clusters
+column_ord <- c(3, 4, 13, 14, 2, 12, 15, 9, 11, 8, 7, 5, 6, 10, 1) |> as.character()
+Heatmap(cellMatrix_norm, name = "Proportion of\ncluster cells", col = col_func,
+        border_gp = grid::gpar(col = "black", lty = 2),
+        rect_gp = grid::gpar(col = "white", lwd = 2),
+        row_title = "Annotations",
+        column_title = "Clusters",
+        column_title_side = "bottom",
+        column_order = column_ord,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        column_title_gp = gpar(fontsize = 14),
+        row_names_gp = gpar(fontsize = 12),
+        column_names_gp = gpar(fontsize = 12),
+        heatmap_legend_param = list(title_gp = gpar(fontsize = 14),
+                                    labels_gp = gpar(fontsize = 12)))
+```
+
+```{r}
+#### panel c - spatial plots highlighting Invasive_Tumor region and clusters
+
+annotToplot <- ifelse(spe_br$celltype == "Invasive_Tumor",
+                      "Invasive_Tumor", "Others")
+invasive_annot <- plotReducedDim(spe_br, dimred = "spatial", 
+                                 color_by = I(annotToplot), point_size = 1.5, 
+                                 point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", 
+                                "Invasive_Tumor" = "#139992")) +
+  facet_wrap(~spe_br$sample_id, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+clustToplot <- ifelse(spe_br$ClustSIGNAL %in% invasive_clusters, 
+                      spe_br$ClustSIGNAL, "Others")
+invasive_clust <- plotReducedDim(spe_br, dimred = "spatial", 
+                                 color_by = I(clustToplot), point_size = 1.5, 
+                                 point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_br$sample_id, scales = "free") +
+  scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#65A83E", "#0F4A9C"), 
+                                       c("Others", invasive_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+comb_invasive_plot <- invasive_annot / invasive_clust + plot_layout(guides = "collect")
+```
+
+```{r}
+#### panel d - top markers genes of Invasive_Tumor clusters
+
+spe_br_sub <- spe_br[, spe_br$ClustSIGNAL %in% invasive_clusters]
+markers <- findMarkers(spe_br_sub, test.type = "t", 
+                       groups = as.character(spe_br_sub$ClustSIGNAL))
+
+top_br_markers <- lapply(markers, function(x) {
+  imp_markers <- x[x$FDR < 0.05,]
+  return(rownames(imp_markers)[1:10])}) |> 
+  unlist() |> unique()
+gexp_br_marker <- logcounts(spe_br_sub)[top_br_markers, ] |> as.matrix() |> 
+  t() |> as.data.frame()
+gexp_br_marker$cluster <- factor(as.character(spe_br_sub$ClustSIGNAL))
+gexp_br_marker_melt <- reshape2::melt(gexp_br_marker, id.vars = "cluster", 
+                                      variable.name = "gene", 
+                                      value.name = "expression")
+
+summary_data <- gexp_br_marker_melt %>%
+  group_by(cluster, gene) %>%
+  summarise(
+    meanExpression = mean(expression),
+    PerctageCells = sum(expression > 0) / n() * 100)
+
+markerPlot_invasive <- summary_data %>%
+  ggplot(aes(x = cluster, y = gene, size = PerctageCells, color = meanExpression)) +
+  geom_point() +
+  scale_size_continuous(limit = c(0, 100), range = c(0, 5)) +
+  scale_color_gradient(low = "white", high = "darkblue") + 
+  labs(x = "Invasive tumor clusters", y = "Genes", color = "Average\nexpression", 
+       size = "Percentage\ncells\nexpressed") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        plot.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10)) 
+
+
+#### panel e - expression plots of Invasive_Tumor cluster marker genes
+
+# removing genes with more global expression
+invasiveClust_genes <- setdiff(top_br_markers, c("GATA3", "SCD", "FASN", "FOXA1", 
+                                                 "ANKRD30A", "EPCAM", "BASP1"))
+
+spe_br_sub <- spe_br[rownames(spe_br) %in% invasiveClust_genes,]
+minCounts <- min(logcounts(spe_br_sub))
+maxCounts <- max(logcounts(spe_br_sub))
+
+genes_plotList <- setNames(lapply(invasiveClust_genes, function(g) {
+  g_plt <- plotReducedDim(spe_br_sub, dimred = "spatial", colour_by = g,
+                          scattermore = T, point_size = 3) +
+    facet_wrap(~spe_br_sub$sample_id, scales = "free", ncol = 1) +
+    scale_color_continuous(low = "grey90", high = "darkblue", 
+                           limits = c(minCounts, maxCounts)) +
+    labs(title = g, color = "Normalised\nexpression") +
+    theme_classic() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line = element_blank(),
+          strip.text = element_blank(),
+          strip.background = element_blank(),
+          plot.title = element_text(size = 14, hjust = 0.5),
+          legend.title = element_text(size = 14),
+          legend.text = element_text(size = 12))
+}), invasiveClust_genes)
+
+gene_plot <- wrap_plots(genes_plotList, nrow = 1, guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#### panel f - spatial plots highlighting DCIS region and clusters
+
+annotToplot <- ifelse(spe_br$celltype == "DCIS_1", "DCIS_1",
+                      ifelse(spe_br$celltype == "DCIS_2", "DCIS_2", "Others"))
+dcis_annot <- plotReducedDim(spe_br, dimred = "spatial", 
+                             color_by = I(annotToplot), point_size = 1.5, 
+                             point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", "DCIS_1" = "#139992",
+                                "DCIS_2" = "#354E23")) +
+  facet_wrap(~spe_br$sample_id, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+clustToplot <- ifelse(spe_br$ClustSIGNAL %in% dcis_clusters, 
+                      spe_br$ClustSIGNAL, "Others")
+dcis_clust <- plotReducedDim(spe_br, dimred = "spatial", 
+                             color_by = I(clustToplot), point_size = 1.5, 
+                             point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_br$sample_id, scales = "free") +
+  scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#65A83E", "#0F4A9C"),
+                                       c("Others", dcis_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+comb_dcis_plot <- dcis_annot / dcis_clust + plot_layout(guides = "collect")
+```
+
+```{r}
+#### panel d - top markers genes of DCIS clusters
+
+spe_br_sub <- spe_br[, spe_br$ClustSIGNAL %in% dcis_clusters]
+markers <- findMarkers(spe_br_sub, test.type = "t", 
+                       groups = as.character(spe_br_sub$ClustSIGNAL))
+
+top_br_markers <- lapply(markers, function(x) {
+  imp_markers <- x[x$FDR < 0.05,]
+  return(rownames(imp_markers)[1:10])}) |> 
+  unlist() |> unique()
+gexp_br_marker <- logcounts(spe_br_sub)[top_br_markers, ] |> as.matrix() |> 
+  t() |> as.data.frame()
+gexp_br_marker$cluster <- factor(as.character(spe_br_sub$ClustSIGNAL))
+gexp_br_marker_melt <- reshape2::melt(gexp_br_marker, id.vars = "cluster", 
+                                      variable.name = "gene", 
+                                      value.name = "expression")
+
+summary_data <- gexp_br_marker_melt %>%
+  group_by(cluster, gene) %>%
+  summarise(
+    meanExpression = mean(expression),
+    PerctageCells = sum(expression > 0) / n() * 100)
+
+markerPlot_br <- summary_data %>%
+  ggplot(aes(x = cluster, y = gene, size = PerctageCells, 
+             color = meanExpression)) +
+  geom_point() +
+  scale_size_continuous(limit = c(0, 100), range = c(0, 5)) +
+  scale_color_gradient(low = "white", high = "darkblue") + 
+  labs(x = "DCIS clusters", y = "Genes", 
+       color = "Average\nexpression", 
+       size = "Percentage\ncells\nexpressed") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        plot.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10)) 
+
+
+#### panel e - expression plots of DCIS cluster marker genes
+
+# removing genes with more global expression
+dcisClust_genes <- setdiff(top_br_markers, c("CEACAM6", "KRT7", "GATA3", "CD9",
+                                             "TCIM", "ENAH"))
+
+spe_br_sub <- spe_br[rownames(spe_br) %in% dcisClust_genes,]
+minCounts <- min(logcounts(spe_br_sub))
+maxCounts <- max(logcounts(spe_br_sub))
+
+genes_plotList <- setNames(lapply(dcisClust_genes, function(g) {
+  g_plt <- plotReducedDim(spe_br_sub, dimred = "spatial", colour_by = g,
+                          scattermore = T, point_size = 3) +
+    facet_wrap(~spe_br_sub$sample_id, scales = "free", ncol = 1) +
+    scale_color_continuous(low = "grey90", high = "darkblue", 
+                           limits = c(minCounts, maxCounts)) +
+    labs(title = g, color = "Normalised\nexpression") +
+    theme_classic() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line = element_blank(),
+          strip.text = element_blank(),
+          strip.background = element_blank(),
+          plot.title = element_text(size = 14, hjust = 0.5),
+          legend.title = element_text(size = 14),
+          legend.text = element_text(size = 12))
+}), dcisClust_genes)
+
+gene_plot <- wrap_plots(genes_plotList, nrow = 1, guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#### panels i-n - over-representation plots of Invasive_Tumor and DCIS clusters
+
+# EnrichGO analysis of Invasive_Tumor clusters
+
+spe_br_sub <- spe_br[, spe_br$ClustSIGNAL %in% invasive_clusters]
+markers <- findMarkers(spe_br_sub, test.type = "t", 
+                       groups = as.character(spe_br_sub$ClustSIGNAL))
+
+# cluster 2 plot
+sig_genes_2 <- rownames(markers[["2"]][markers[["2"]]$FDR < 0.05 & 
+                                         markers[["2"]]$summary.logFC > 0.2, ])
+go_enrich_2 <- enrichGO(gene = sig_genes_2,
+                        OrgDb = org.Hs.eg.db,
+                        keyType = "SYMBOL",
+                        ont = "BP",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff  = 0.05,
+                        qvalueCutoff  = 0.05)
+ova2_plot <- ggplot(go_enrich_2[go_enrich_2$Count >= 5,],
+                    aes(x = reorder(Description, p.adjust, decreasing = T),
+                        y = -log10(p.adjust), fill = p.adjust)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), hjust = 0) +
+  coord_flip() +
+  scale_fill_gradient(low = "blue", high = "red",
+                      name = "Adjusted P-value") +
+  labs(y = "-Log10(Adjusted P-value)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.key.height = unit(0.1, "cm"))
+
+# cluster 13 plot
+sig_genes_13 <- rownames(markers[["13"]][markers[["13"]]$FDR < 0.05 & 
+                                           markers[["13"]]$summary.logFC > 0.2, ])
+go_enrich_13 <- enrichGO(gene = sig_genes_13,
+                         OrgDb = org.Hs.eg.db,
+                         keyType = "SYMBOL",
+                         ont = "BP",
+                         pAdjustMethod = "BH",
+                         pvalueCutoff  = 0.05,
+                         qvalueCutoff  = 0.05)
+ova13_plot <- ggplot(go_enrich_13[go_enrich_13$Count >= 5,][1:20,],
+                     aes(x = reorder(Description, p.adjust, decreasing = T),
+                         y = -log10(p.adjust), fill = p.adjust)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), hjust = 0) +
+  coord_flip() +
+  scale_fill_gradient(low = "blue", high = "red",
+                      name = "Adjusted\nP-value") +
+  labs(y = "-Log10(Adjusted P-value)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.key.height = unit(0.3, "cm"))
+
+# cluster 14 plot
+sig_genes_14 <- rownames(markers[["14"]][markers[["14"]]$FDR < 0.05 & 
+                                           markers[["14"]]$summary.logFC > 0.2, ])
+go_enrich_14 <- enrichGO(gene = sig_genes_14,
+                         OrgDb = org.Hs.eg.db,
+                         keyType = "SYMBOL",
+                         ont = "BP",
+                         pAdjustMethod = "BH",
+                         pvalueCutoff  = 0.05,
+                         qvalueCutoff  = 0.05)
+ova14_plot <- ggplot(go_enrich_14[go_enrich_14$Count >= 5,],
+                     aes(x = reorder(Description, p.adjust, decreasing = T),
+                         y = -log10(p.adjust), fill = p.adjust)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), hjust = 0) +
+  coord_flip() +
+  scale_fill_gradient(low = "blue", high = "red",
+                      name = "Adjusted\nP-value") +
+  labs(y = "-Log10(Adjusted P-value)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.key.height = unit(0.3, "cm"))
+
+
+
+# EnrichGO analysis of DCIS clusters
+
+spe_br_sub <- spe_br[, spe_br$ClustSIGNAL %in% dcis_clusters]
+markers <- findMarkers(spe_br_sub, test.type = "t", 
+                       groups = as.character(spe_br_sub$ClustSIGNAL))
+
+# cluster 9 plot
+sig_genes_9 <- rownames(markers[["9"]][markers[["9"]]$FDR < 0.05 & 
+                                         markers[["9"]]$summary.logFC > 0.2, ])
+go_enrich_9 <- enrichGO(gene = sig_genes_9,
+                        OrgDb = org.Hs.eg.db,
+                        keyType = "SYMBOL",
+                        ont = "BP",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff  = 0.05,
+                        qvalueCutoff  = 0.05)
+ova9_plot <- ggplot(go_enrich_9[go_enrich_9$Count >= 5,],
+                    aes(x = reorder(Description, p.adjust, decreasing = T),
+                        y = -log10(p.adjust), fill = p.adjust)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), hjust = 0) +
+  coord_flip() +
+  scale_fill_gradient(low = "blue", high = "red",
+                      name = "Adjusted\nP-value") +
+  labs(y = "-Log10(Adjusted P-value)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.key.height = unit(0.3, "cm"))
+
+# cluster 12 plot
+sig_genes_12 <- rownames(markers[["12"]][markers[["12"]]$FDR < 0.05 & 
+                                           markers[["12"]]$summary.logFC > 0.2, ])
+go_enrich_12 <- enrichGO(gene = sig_genes_12,
+                         OrgDb = org.Hs.eg.db,
+                         keyType = "SYMBOL",
+                         ont = "BP",
+                         pAdjustMethod = "BH",
+                         pvalueCutoff  = 0.05,
+                         qvalueCutoff  = 0.05)
+ova12_plot <- ggplot(go_enrich_12[go_enrich_12$Count >= 5,],
+                     aes(x = reorder(Description, p.adjust, decreasing = T),
+                         y = -log10(p.adjust), fill = p.adjust)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), hjust = 0) +
+  coord_flip() +
+  scale_fill_gradient(low = "blue", high = "red",
+                      name = "Adjusted\nP-value") +
+  labs(y = "-Log10(Adjusted P-value)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.key.height = unit(0.3, "cm"))
+
+# cluster 15 plot
+sig_genes_15 <- rownames(markers[["15"]][markers[["15"]]$FDR < 0.05 & 
+                                           markers[["15"]]$summary.logFC > 0.2, ])
+go_enrich_15 <- enrichGO(gene = sig_genes_15,
+                         OrgDb = org.Hs.eg.db,
+                         keyType = "SYMBOL",
+                         ont = "BP",
+                         pAdjustMethod = "BH",
+                         pvalueCutoff  = 0.05,
+                         qvalueCutoff  = 0.05)
+ova15_plot <- ggplot(go_enrich_15[go_enrich_15$Count >= 5,],
+                     aes(x = reorder(Description, p.adjust, decreasing = T),
+                         y = -log10(p.adjust), fill = p.adjust)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), hjust = 0) +
+  coord_flip() +
+  scale_fill_gradient(low = "blue", high = "red",
+                      name = "Adjusted\nP-value") +
+  labs(y = "-Log10(Adjusted P-value)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.key.height = unit(0.3, "cm"))
+```
+
+# Suppl Fig. 19
+
+```{r}
+# reading spe object with ClustSIGNAL clusters
+spe_lc <- readRDS("./data_outputs/benchmarkOut/spe_lc_cSIGNAL.Rds")
+
+tumpor9_clusters <- c(7, 10)
+
+tumor6_clusters <- c(8, 12)
+```
+
+```{r}
+#### panel a - spatial plots of tumor 9 region and clusters
+annotToplot <- ifelse(spe_lc$cell_type == "tumor 9", "tumor 9", "Others")
+tumor9_annot <- plotReducedDim(spe_lc, dimred = "spatial", 
+                               color_by = I(annotToplot), point_size = 1.5, 
+                               point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", 
+                                "tumor 9" = "#139992")) +
+  facet_wrap(~spe_lc$Run_Tissue_name, scales = "free", nrow = 1) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Annotation") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+clustToplot <- ifelse(spe_lc$ClustSIGNAL %in% tumpor9_clusters, 
+                      spe_lc$ClustSIGNAL, "Others")
+tumor9_clust <- plotReducedDim(spe_lc, dimred = "spatial", 
+                               color_by = I(clustToplot), point_size = 1.5, 
+                               point_alpha = 1, scattermore = TRUE) +
+  facet_wrap(~spe_lc$Run_Tissue_name, scales = "free", nrow = 1) +
+  scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#0F4A9C"), 
+                                       c("Others", tumpor9_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+comb_tumor9_plot <- tumor9_annot / tumor9_clust + plot_layout(guides = "collect")
+```
+
+```{r}
+#### panel b - composition of ClustSIGNAL clusters
+
+cellMatrix <- as.matrix(table(spe_lc$cell_type, spe_lc$ClustSIGNAL))
+# normalising values by number of cells in a cluster
+cellMatrix_norm <- sweep(cellMatrix, 2, colSums(cellMatrix), FUN = "/") 
+col_func <- colorRamp2(seq(min(cellMatrix_norm), max(cellMatrix_norm), 
+                           length = 3), c("aliceblue", "#bb0c00", "darkred"))
+# ordering clusters
+column_ord <- c(12, 10, 7, 8, 9, 5, 3, 1, 2, 11, 4, 6, 13) |> as.character()
+Heatmap(cellMatrix_norm, name = "Proportion of\ncluster cells", col = col_func,
+        border_gp = grid::gpar(col = "black", lty = 2),
+        rect_gp = grid::gpar(col = "white", lwd = 2),
+        row_title = "Annotations",
+        column_title = "Clusters",
+        column_title_side = "bottom",
+        column_order = column_ord,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        column_title_gp = gpar(fontsize = 14),
+        row_names_gp = gpar(fontsize = 12),
+        column_names_gp = gpar(fontsize = 12),
+        heatmap_legend_param = list(title_gp = gpar(fontsize = 14),
+                                    labels_gp = gpar(fontsize = 12)))
+```
+
+```{r}
+#### panels c - top markers genes of tumor 9 clusters
+
+spe_lc_sub <- spe_lc[, spe_lc$ClustSIGNAL %in% tumpor9_clusters]
+markers <- findMarkers(spe_lc_sub, test.type = "t", 
+                       groups = as.character(spe_lc_sub$ClustSIGNAL))
+
+top_lc_markers <- lapply(markers, function(x) {
+  imp_markers <- x[x$FDR < 0.05,]
+  return(rownames(imp_markers)[1:10])}) |> 
+  unlist() |> unique()
+gexp_lc_marker <- logcounts(spe_lc_sub)[top_lc_markers, ] |> as.matrix() |> 
+  t() |> as.data.frame()
+gexp_lc_marker$cluster <- factor(as.character(spe_lc_sub$ClustSIGNAL))
+gexp_lc_marker_melt <- reshape2::melt(gexp_lc_marker, id.vars = "cluster", 
+                                      variable.name = "gene", 
+                                      value.name = "expression")
+
+summary_data <- gexp_lc_marker_melt %>%
+  group_by(cluster, gene) %>%
+  summarise(
+    meanExpression = mean(expression),
+    PerctageCells = sum(expression > 0) / n() * 100)
+
+markerPlot_tumor9 <- summary_data %>%
+  ggplot(aes(x = cluster, y = gene, size = PerctageCells, 
+             color = meanExpression)) +
+  geom_point() +
+  scale_size_continuous(limit = c(0, 100), range = c(0, 5)) +
+  scale_color_gradient(low = "white", high = "darkblue") + 
+  labs(x = "Tumor 9 clusters", y = "Genes", 
+       color = "Average\nexpression", 
+       size = "Percentage\ncells\nexpressed") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        plot.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10)) 
+
+
+#### panels e - spatial plots od top markers genes of tumor 9 clusters
+
+# removing genes with more global expression
+tumor9Clust_genes <- setdiff(top_lc_markers, c("MALAT1", "HSP90AB1", "SOX4",
+                                               "MZT2A"))
+
+spe_lc_sub <- spe_lc[rownames(spe_lc) %in% tumor9Clust_genes, 
+                     spe_lc$patient == "Lung9"]
+minCounts <- min(logcounts(spe_lc_sub))
+maxCounts <- max(logcounts(spe_lc_sub))
+
+genes_plotList <- setNames(lapply(tumor9Clust_genes, function(g) {
+  g_plt <- plotReducedDim(spe_lc_sub, dimred = "spatial", colour_by = g,
+                          scattermore = T, point_size = 3) +
+    facet_wrap(~spe_lc_sub$Run_Tissue_name, scales = "free", ncol = 1,
+               strip.position = "left") +
+    scale_color_continuous(low = "grey90", high = "darkblue", 
+                           limits = c(minCounts, maxCounts)) +
+    labs(title = g, color = "Normalised\nexpression") +
+    theme_classic() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line = element_blank(),
+          strip.text = element_blank(),
+          strip.background = element_blank(),
+          plot.title = element_text(size = 14, hjust = 0.5),
+          legend.title = element_text(size = 14),
+          legend.text = element_text(size = 12))
+}), tumor9Clust_genes)
+
+gene_plot <- wrap_plots(genes_plotList, nrow = 1, guides = "collect")
+```
+
+```{r}
+#### panel d - colocalisation of clusters in Lung9 samples
+
+res_lc <- readRDS("./data_outputs/benchmarkOut/res_lc_cSIGNAL.Rds")
+nnCells <- res_lc$neighbours
+spe_lc <- res_lc$spe_final
+names(spe_lc$ClustSIGNAL) <- colnames(spe_lc)
+
+samples <- c("Lung9_Rep1", "Lung9_Rep2")
+
+# clusters colocalisation
+clusters <- sort(unique(spe_lc$ClustSIGNAL))
+coloc_matList <- setNames(lapply(samples, function(samp) {
+  speX <- spe_lc[, spe_lc$Run_Tissue_name == samp]
+  # sub-setting ClustSIGNAL neighbourhood data, excluding the cell itself
+  knn_out <- nnCells[speX$cell_ID, 2:31] # using existing neighbour data
+  coloc_mat <- matrix(0, nrow = length(clusters), ncol = length(clusters),
+                      dimnames = list(clusters, clusters)) # initialising matrix
+  for (i in speX$cell_ID) {
+    source_cluster <- speX$ClustSIGNAL[i] # identify source cluster
+    neighbor_ids <- knn_out[i, ] # identify neighbouring cells
+    neighbor_clusters <- speX$ClustSIGNAL[neighbor_ids] # get neighbours' clusters
+    coloc_counts <- table(factor(neighbor_clusters, levels = clusters)) # cluster counts
+    # add cluster counts to total
+    coloc_mat[source_cluster, ] <- coloc_mat[source_cluster, ] + coloc_counts 
+  }
+  print(samp)
+  return(coloc_mat)
+}), samples)
+
+col_func <- colorRamp2(seq(0, 1, length = 2), c("white", "red"))
+topAnn <- HeatmapAnnotation(Clusters = anno_text(as.character(c(1:13)), 
+                                                 gp = gpar(fontsize = 12),
+                                                 rot = 0, just = "center", 
+                                                 location = 0.5))
+
+coloc_prop9_1 <- coloc_matList[["Lung9_Rep1"]] / rowSums(coloc_matList[["Lung9_Rep1"]])
+colocal_ht9_1 <- Heatmap(
+  coloc_prop9_1, name = "Proportion of clusters", 
+  col = col_func,
+  na_col = "grey95",
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  border_gp = grid::gpar(col = "black", lty = 2, lwd = 1),
+  rect_gp = grid::gpar(col = "white", lwd = 1),
+  column_title_side = "top",
+  column_title_gp = gpar(fontsize = 14),
+  column_title = "Neighbouring clusters",
+  row_title = "Lung9_Rep1 clusters",
+  row_title_gp = gpar(fontsize = 14),
+  row_names_gp = gpar(fontsize = 12),
+  row_names_side = "left",
+  top_annotation = topAnn,
+  show_column_names = FALSE, 
+  show_heatmap_legend = FALSE)
+
+coloc_prop9_2 <- coloc_matList[["Lung9_Rep2"]] / rowSums(coloc_matList[["Lung9_Rep2"]])
+colocal_ht9_2 <- Heatmap(
+  coloc_prop9_2, name = "Proportion of clusters", 
+  col = col_func,
+  na_col = "grey95",
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  border_gp = grid::gpar(col = "black", lty = 2, lwd = 1),
+  rect_gp = grid::gpar(col = "white", lwd = 1),
+  column_title_side = "top",
+  column_title_gp = gpar(fontsize = 14),
+  column_title = "Neighbouring clusters",
+  row_title = "Lung9_Rep2 clusters",
+  row_title_gp = gpar(fontsize = 14),
+  row_names_gp = gpar(fontsize = 12),
+  row_names_side = "left",
+  show_column_names = FALSE, 
+  show_heatmap_legend = FALSE)
+
+legend <- Legend(
+  col_fun = col_func,
+  title = "Proportion of neighbouring clusters",
+  title_position = "topcenter",
+  direction = "horizontal",
+  legend_width = unit(5, "cm"),
+  title_gp = gpar(fontsize = 14),
+  labels_gp = gpar(fontsize = 12),
+  border = TRUE
+)
+
+ht_list_9 <- colocal_ht9_1 %v% colocal_ht9_2
+draw(ht_list_9, heatmap_legend_list = list(legend), heatmap_legend_side = "bottom")
+```
+
+```{r}
+#### panel f - spatial plots of samples and genes showing FOV batch effects
+
+# spatial plot highlighting tumor 6 region in Lung6 sample
+annotToplot <- ifelse(spe_lc_sub$cell_type == "tumor 6", 
+                      "tumor 6", "Others")
+annot_plot <- plotReducedDim(spe_lc_sub, dimred = "spatial", 
+                             color_by = I(annotToplot), point_size = 1.5, 
+                             point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = c("Others" = "grey95", "tumor 6" = "#139992")) +
+  guides(colour = guide_legend(override.aes = list(size = 5), nrow = 2)) +
+  labs(color = "Annotations") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.position = "bottom",
+        legend.title.position = "top")
+
+# spatial plots highlighting tumor 6 clusters in Lung6 sample
+clustToplot <- ifelse(spe_lc_sub$ClustSIGNAL %in% tumor6_clusters, 
+                      spe_lc_sub$ClustSIGNAL, "Others")
+clust_plot <- plotReducedDim(spe_lc_sub, dimred = "spatial", 
+                             color_by = I(clustToplot), point_size = 1.5, 
+                             point_alpha = 1, scattermore = TRUE) +
+  scale_color_manual(values = setNames(c("grey95", "#EF5A9D", "#65A83E"), 
+                                       c("Others", tumor6_clusters))) +
+  guides(colour = guide_legend(override.aes = list(size = 5), nrow = 2)) +
+  labs(color = "Clusters") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.position = "bottom",
+        legend.title.position = "top")
+
+# spatial plots of gene expression with FOV batch effects
+markers <- findMarkers(spe_lc, test.type = "t", 
+                       groups = as.character(spe_lc$ClustSIGNAL))
+markers_8 <- markers[["8"]][markers[["8"]]$FDR < 0.05,][1:10,] |>
+  rownames()
+
+# removing markers with very low/high expression with no FOV batch effect
+markers_8 <- setdiff(markers_8, c("CD74", "COL1A1", "HLA-DRB1", "KRT5"))
+
+spe_lc_sub <- spe_lc[rownames(spe_lc) %in% markers_8, spe_lc$patient == "Lung6"]
+minCounts <- min(logcounts(spe_lc_sub))
+maxCounts <- max(logcounts(spe_lc_sub))
+
+genes_plotList <- setNames(lapply(markers_8, function(g) {
+  g_plt <- plotReducedDim(spe_lc_sub, dimred = "spatial", colour_by = g,
+                          scattermore = T, point_size = 3) +
+    labs(title = g, color = "Normalised\nexpression") +
+    theme_classic() +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line = element_blank(),
+          strip.text = element_blank(),
+          strip.background = element_blank(),
+          plot.title = element_text(size = 14, hjust = 0.5),
+          legend.position = "bottom",
+          legend.title.position = "top")
+}), markers_8)
+
+gene_plot <- annot_plot + clust_plot + wrap_plots(genes_plotList, nrow = 1) +
+  plot_layout(widths = c(1, 1, 7))
+```
+
+# Suppl Fig. 20
+
+```{r}
+#### function for calculating sample-level entropy metrics
+entropy_metrics <- function(ent_list, coord_list, threshold_high = 0.6, 
+                            threshold_low = 0.4) {
+  results <- lapply(names(ent_list), function(samp) {
+    entropy_values <- ent_list[[samp]]
+    coords <- coord_list[[samp]]
+    
+    mean_entropy <- mean(entropy_values)
+    median_entropy <- median(entropy_values)
+    sd_entropy <- sd(entropy_values)
+    # Proportion of high-entropy cells
+    prop_high_entropy <- mean(entropy_values > threshold_high)
+    # Proportion of low-entropy cells
+    prop_low_entropy <- mean(entropy_values < threshold_low)
+    
+    # Combine all metrics
+    data.frame(Sample = samp,
+               MeanEntropy = mean_entropy,
+               MedianEntropy = median_entropy,
+               SD_Entropy = sd_entropy,
+               ProportionHighEntropy = prop_high_entropy,
+               ProportionLowEntropy = prop_low_entropy)
+  })
+  do.call(rbind, results)
+}
+```
+
+```{r}
+#### calculating entropy metrics
+
+# reading ClustSIGNAL results from Keren et al, 2018 data
+res <- readRDS("./data_outputs/Keren_2018/res_cSIGNAL.Rds")
+
+# spe object with ClustSIGNAL clusters and entropy values
+speK <- res$spe_final
+reducedDim(speK, "spatial") <- spatialCoords(speK)
+
+# entropy normalization in each sample
+samps <- speK$imageID |> unique() # all samples
+# list of normalised entropy values in each sample
+ent_list <- setNames(lapply(samps, function(s) {
+  # sub-setting metadata to a sample
+  df <- colData(speK)[speK$imageID == s, ]
+  # total subclusters identified in the sample
+  tot_subclust <- length(unique(df$initSubcluster))
+  # normalising entropy values
+  nEnt <- df$entropy / log2(tot_subclust)
+  names(nEnt) <- df$uniqueID
+  return(nEnt)
+}), samps)
+
+norm_ent <- unlist(ent_list)
+
+# check before combining data
+if (isTRUE(identical(speK$uniqueID, names(norm_ent)))) {
+  speK$normEntropy <- norm_ent
+} else {
+  print("Mismatched data.")
+}
+
+# list of spatial coordinates in each sample
+coord_list <- setNames(lapply(samps, function(x) 
+  spatialCoords(speK[, speK$imageID == x])), samps)
+
+# calculating sample-level entropy values
+out_metrics <- entropy_metrics(ent_list, coord_list)
+```
+
+```{r}
+#### gathering sample data 
+
+sample_data <- data.frame(Samples = speK$imageID, 
+                          Survival_days = speK$`Survival_days_capped*`,
+                          Censor = speK$Censored) %>% 
+  distinct() 
+
+# adding sample-level metrics, after checks
+if (identical(out_metrics$Sample, sample_data$Samples)) {
+  out_metrics <- cbind(out_metrics, sample_data[, 2:3]) %>%
+    mutate(Survival_years = Survival_days / 365) %>%
+    mutate(Survival = ifelse(Survival_years > 5, "High", "Low")) %>%
+    # sort 
+    arrange(Censor, desc(Survival_days))
+} else {
+  print("Data mismatch.")
+}
+out_metrics$Sample <- factor(out_metrics$Sample, levels = out_metrics$Sample)
+```
+
+```{r}
+#### visualising outcomes for uncensored data
+
+# sub-setting uncensored data
+speK_sub <- speK[, speK$Censored == 0]
+
+# arranging samples by survival (high to low)
+speK_sub$imageID <- factor(as.character(speK_sub$imageID), 
+                           levels = sample_data[sample_data$Censor == 0, "Samples"])
+
+# entropy plot of uncensored samples arranged from high to low survival
+uncen_ent_plt <- plotReducedDim(speK_sub, dimred = "spatial", 
+                                colour_by = "normEntropy", point_alpha = 1,
+                                point_size = 0.2) + 
+  facet_wrap(~speK_sub$imageID, nrow = 1) +
+  scale_color_gradient2(low = "darkblue", mid = "seashell", high = "darkred",
+                        midpoint = 0.5, limits = c(0, 1),
+                        name = "Normalised\nentropy\n") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.width = unit(1, "cm"))
+```
+
+```{r}
+# converting sample-level entropy metrics data frame to long format
+out_metrics_melt <- reshape2::melt(out_metrics, 
+                                   id.vars = c("Sample", "Survival_days", "Censor",
+                                               "Survival_years", "Survival"),
+                                   variable.name = "Metric", value.name = "Value")
+
+# per patient sample metrics plot
+metric_labels <- setNames(c("Mean entropy", "Median entropy", "SD of entropy",
+                            "Proportion of\nhigh entropy", 
+                            "Proportion of\nlow entropy"), 
+                          c("MeanEntropy", "MedianEntropy", "SD_Entropy",
+                            "ProportionHighEntropy", "ProportionLowEntropy"))
+metric_plot <- out_metrics_melt[
+  out_metrics_melt$Censor == 0 & out_metrics_melt$Metric %in% 
+    c("MeanEntropy", "MedianEntropy", "SD_Entropy", "ProportionHighEntropy",
+      "ProportionLowEntropy"), ] %>%
+  ggplot(aes(x = Sample, y = Value, group = Metric, color = Survival)) +
+  geom_point() +
+  geom_line() +
+  ylim(0, NA) +
+  labs(x = "Patient ID") +
+  facet_wrap(~Metric , scales = "free", ncol = 1, strip.position = "left",
+             labeller = labeller(Metric = metric_labels)) +
+  scale_color_manual(values = c("High" = "green", "Low" = "red")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        axis.title.y = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        strip.placement = "outside",
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.position = "bottom")
+
+
+# metrics vs survival days plot
+correl_plot <- out_metrics_melt[
+  out_metrics_melt$Censor == 0 & out_metrics_melt$Metric %in% 
+    c("MeanEntropy", "MedianEntropy", "SD_Entropy", "ProportionHighEntropy",
+      "ProportionLowEntropy"), ] %>%
+  ggplot(aes(x = Survival_days, y = Value)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_reverse() +
+  ylim(0, NA) +
+  labs() +
+  facet_wrap(~Metric , scales = "free", ncol = 1) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        axis.title.y = element_blank(),
+        strip.text = element_blank(),
+        strip.background = element_blank())
+
+tot_plot <- metric_plot + correl_plot
+```

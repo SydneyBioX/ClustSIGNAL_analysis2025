@@ -1,0 +1,128 @@
+---
+title: "Supplementary data analysis"
+author: "Pratibha Panwar"
+date: "2025-09-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r}
+library(SpatialDatasets)
+library(SpatialExperiment)
+library(dplyr)
+
+library(scater)
+library(ggplot2)
+
+library(clustSIGNAL)
+```
+
+# Supplementary material
+
+## Keren et al, 2018 data analysis
+
+Data were extracted as a spatial proteomics spe object from SpatialDatasets 
+package.
+
+```{r}
+#### data extraction and pre-processing
+
+# library(SpatialDatasets)
+speK <- spe_Keren_2018() # extracted from SpatialDatasets
+
+# converting intensity assay data frame to matrix
+assay(speK, "intensities") <- as.matrix(assay(speK, "intensities"))
+
+# identifying control metal ions and nuclear stains
+control_features <- c("Na", "Si", "P", "Ca", "Fe", "Ta", "Au", "Background")
+nuclear_stains <- c("dsDNA", "H3K9ac", "H3K27me3")
+
+# removing metal ion and nuclear controls
+speK <- speK[!(rownames(speK) %in% append(control_features, nuclear_stains)), ]
+
+# creating unique cellIDs
+speK$uniqueID <- paste0("Cell_", speK$imageID, "_", speK$CellID)
+colnames(speK) <- speK$uniqueID
+rownames(colData(speK)) <- speK$uniqueID
+rownames(spatialCoords(speK)) <- speK$uniqueID
+```
+
+```{r}
+#### Generating gene expression
+
+# Following Keren et al, 2018 protocol for converting intensity to 
+# expression information
+# "Expression assignment
+# For each cell, for each maker, the total intensity per cell was computed. 
+# Values were divided by the cell size, Arcsinh transformed, and standardized 
+# across markers using std normalization."
+
+# Normalizing by cell size
+cell_size <- speK$cellSize
+intensity_mat <- assay(speK, "intensities")
+intensity_norm <- sweep(intensity_mat, 2, cell_size, FUN = "/")
+
+# Arcsinh transformation of data
+intensity_arcsinh <- asinh(intensity_norm)
+
+# z-score normalisation (standardization)
+intensity_z <- t(scale(t(intensity_arcsinh)))
+
+# Storing normalised expression data in spe object
+assay(speK, "expression") <- intensity_z
+```
+
+```{r}
+#### Visualisation and QC check
+
+# visualising expression
+plot(density(assay(speK, "expression")))
+
+# QC check
+speK |> 
+  join_features(features = rownames(speK), shape = "wide", assay = "expression") |> 
+  ggplot(aes(x = CD3, colour = imageID)) + 
+  geom_density() + 
+  theme_classic() +
+  theme(legend.position = "none")
+```
+
+```{r}
+#### Running ClustSIGNAL
+
+# checking for batch effects
+set.seed(2025)
+speK <- runPCA(speK, exprs_values = "expression")
+speK <- runUMAP(speK, dimred = "PCA")
+speK$Group <- factor(speK$Group)
+speK$DONOR_NO <- factor(speK$DONOR_NO)
+plotReducedDim(speK, dimred = "UMAP", color_by = "Group", scattermore = T,
+               point_alpha = 1, point_size = 2) +
+  scale_color_manual(values = colors)
+plotReducedDim(speK, dimred = "UMAP", color_by = "DONOR_NO", scattermore = T,
+               point_alpha = 1, point_size = 2) +
+  scale_color_manual(values = colors)
+
+# excluding samples with no survival data
+speK <- speK[, !is.na(speK$`Survival_days_capped*`)]
+
+set.seed(2025)
+# ClustSIGNAL requires a "logcounts" assay with normalised data
+assay(speK, "logcounts") <- assay(speK, "expression")
+speK <- runPCA(speK)
+
+# running ClustSIGNAL - batch effects in Group
+set.seed(567)
+res <- clustSIGNAL(speK, dimRed = "PCA", samples = "imageID", batch_by = TRUE, 
+                   batch = "Group", threads = 8, outputs = "a")
+
+saveRDS(res, "./data_outputs/Keren_2018/res_cSIGNAL.Rds")
+```
+
