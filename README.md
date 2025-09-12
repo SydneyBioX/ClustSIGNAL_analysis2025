@@ -1,10 +1,10 @@
 # ClustSIGNAL_analysis2025
 
-This repository contains code for data analysis and figures reported in the manuscript "**ClustSIGNAL identifies cell types and subtypes using an1 adaptive smoothing approach for scalable spatial clustering**".
+This repository contains code for data analysis and figures reported in the manuscript "**ClustSIGNAL identifies cell types and subtypes using an adaptive smoothing approach for scalable spatial clustering**".
 
 ## Data analysis
 
--   **Simulation analysis** - see Simulation_scripts folder.
+-   Simulation analysis - see Simulation_scripts folder.
 
     -   Simulated_dataAnalysis: simulated data generation, parameter testing, benchmarking adaptive smoothing, stress testing - sparsity and segmentation errors, assessing clustering stability.
 
