@@ -1,6 +1,6 @@
 # ClustSIGNAL_analysis2025
 
-This repository contains code for data analysis and figures reported in the manuscript "**ClustSIGNAL identifies cell types and subtypes using an adaptive smoothing approach for scalable spatial clustering**".
+This repository contains code for data analysis and figures reported in the manuscript "**ClustSIGNAL identifies cell types and subtypes using an adaptive smoothing approach for scalable spatial clustering**". To access the method code and tutorials, see [CLustSIGNAL](https://github.com/SydneyBioX/clustSIGNAL) repository.
 
 ## Data analysis
 
