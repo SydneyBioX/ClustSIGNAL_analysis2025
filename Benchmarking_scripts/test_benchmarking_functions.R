@@ -347,8 +347,103 @@ n_domains <- max(2L, min(3L, n_clusters))
 cntm <- list(SummarizedExperiment::assay(spe_small, assay_name))
 xym <- list(spatialCoords(spe_small))
 
+method_names <- c(
+    "runBANKSY", "runBASS", "runSpatialPCA", "runGraphST", "runSpaGCN",
+    "runSTAGATE"
+)
+selected_method <- Sys.getenv("BENCHMARK_METHOD", unset = "")
+isolate_methods <- identical(Sys.getenv("BENCHMARK_ISOLATE", unset = ""), "1")
+
+if (isolate_methods && !nzchar(selected_method)) {
+    output_dir <- Sys.getenv("BENCHMARK_OUTPUT_DIR", unset = tempdir())
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+    isolated_dir <- file.path(output_dir, "isolated")
+    dir.create(isolated_dir, recursive = TRUE, showWarnings = FALSE)
+
+    child_results <- lapply(method_names, function(method_name) {
+        method_dir <- file.path(isolated_dir, method_name)
+        dir.create(method_dir, recursive = TRUE, showWarnings = FALSE)
+        log_file <- file.path(method_dir, "smoke_test.log")
+        child_env <- c(
+            "BENCHMARK_ISOLATE=0",
+            paste0("BENCHMARK_METHOD=", method_name),
+            paste0("BENCHMARK_OUTPUT_DIR=", method_dir)
+        )
+        for (env_name in c(
+            "BENCHMARK_INPUT", "BENCHMARK_INPUT_URL", "BENCHMARK_PYTHON",
+            "R_MAKEVARS_USER", "MPLCONFIGDIR"
+        )) {
+            env_value <- Sys.getenv(env_name, unset = "")
+            if (nzchar(env_value)) {
+                child_env <- c(child_env, paste0(env_name, "=", env_value))
+            }
+        }
+
+        status <- system2(
+            "Rscript",
+            args = shQuote(script_path),
+            env = child_env,
+            stdout = log_file,
+            stderr = log_file
+        )
+        result_file <- file.path(method_dir, "smoke_test_results.rds")
+        if (file.exists(result_file)) {
+            result <- readRDS(result_file)$summary[1, , drop = FALSE]
+            if (!identical(status, 0L) && result$status == "PASS") {
+                result$status <- "FAIL"
+                result$message <- paste("Subprocess exited with status", status)
+            }
+            return(result)
+        }
+
+        data.frame(
+            method = method_name,
+            status = "FAIL",
+            message = paste(
+                "Subprocess exited before saving results with status", status,
+                "- see", log_file
+            ),
+            stringsAsFactors = FALSE
+        )
+    })
+
+    summary_df <- do.call(rbind, child_results)
+    utils::write.csv(
+        summary_df,
+        file = file.path(output_dir, "smoke_test_summary.csv"),
+        row.names = FALSE
+    )
+    saveRDS(
+        list(
+            summary = summary_df,
+            results = child_results,
+            sample_col = sample_col,
+            annotation_col = annotation_col,
+            assay_name = assay_name,
+            n_cells = ncol(spe_small),
+            n_genes = nrow(spe_small),
+            n_clusters = n_clusters,
+            n_domains = n_domains
+        ),
+        file = file.path(output_dir, "smoke_test_results.rds")
+    )
+    print(summary_df, row.names = FALSE)
+    message("Saved smoke test results to ", normalizePath(output_dir))
+    if (any(summary_df$status == "FAIL")) {
+        stop("One or more benchmark smoke tests failed.")
+    }
+    quit(status = 0L)
+}
+
+runSelectedSmokeTest <- function(name, ...) {
+    if (nzchar(selected_method) && name != selected_method) {
+        return(NULL)
+    }
+    runSmokeTest(name = name, ...)
+}
+
 results <- list(
-    runSmokeTest(
+    runSelectedSmokeTest(
         name = "runBANKSY",
         expr_fn = function() runBANKSY(
             spe_small,
@@ -366,14 +461,14 @@ results <- list(
         required_r = c("Banksy", "Seurat"),
         attach_r = c("Banksy", "Seurat")
     ),
-    runSmokeTest(
+    runSelectedSmokeTest(
         name = "runBASS",
         expr_fn = function() runBASS(cntm = cntm, xym = xym, C = n_clusters, R = n_domains),
         validator = function(res) validateBASS(res, spe_small),
         required_r = c("BASS"),
         attach_r = c("BASS")
     ),
-    runSmokeTest(
+    runSelectedSmokeTest(
         name = "runSpatialPCA",
         expr_fn = function() runSpatialPCA(
             spe_small,
@@ -385,7 +480,7 @@ results <- list(
         required_r = c("SpatialPCA", "bluster"),
         attach_r = c("SpatialPCA", "bluster")
     ),
-    runSmokeTest(
+    runSelectedSmokeTest(
         name = "runGraphST",
         expr_fn = function() runGraphST(
             spe_small,
@@ -404,7 +499,7 @@ results <- list(
         required_r = c("reticulate"),
         required_py = c("anndata", "numpy", "pandas", "scipy", "torch", "GraphST")
     ),
-    runSmokeTest(
+    runSelectedSmokeTest(
         name = "runSpaGCN",
         expr_fn = function() runSpaGCN(
             spe_small,
@@ -414,6 +509,9 @@ results <- list(
             assay_name = assay_name,
             use_histology = FALSE,
             refine = FALSE,
+            init = "kmeans",
+            l_value = 0.1,
+            res = 0.4,
             max_epochs = 20,
             search_res_epochs = 5,
             min_cells = 1,
@@ -423,7 +521,7 @@ results <- list(
         required_r = c("reticulate"),
         required_py = c("anndata", "numpy", "pandas", "scanpy", "scipy", "SpaGCN")
     ),
-    runSmokeTest(
+    runSelectedSmokeTest(
         name = "runSTAGATE",
         expr_fn = function() runSTAGATE(
             spe_small,
@@ -444,6 +542,7 @@ results <- list(
         required_py = c("anndata", "numpy", "pandas", "scanpy", "scipy", "torch", "STAGATE_pyG")
     )
 )
+results <- Filter(Negate(is.null), results)
 
 summary_df <- do.call(
     rbind,
@@ -458,6 +557,31 @@ summary_df <- do.call(
 )
 
 print(summary_df, row.names = FALSE)
+
+output_dir <- Sys.getenv("BENCHMARK_OUTPUT_DIR", unset = "")
+if (nzchar(output_dir)) {
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+    utils::write.csv(
+        summary_df,
+        file = file.path(output_dir, "smoke_test_summary.csv"),
+        row.names = FALSE
+    )
+    saveRDS(
+        list(
+            summary = summary_df,
+            results = results,
+            sample_col = sample_col,
+            annotation_col = annotation_col,
+            assay_name = assay_name,
+            n_cells = ncol(spe_small),
+            n_genes = nrow(spe_small),
+            n_clusters = n_clusters,
+            n_domains = n_domains
+        ),
+        file = file.path(output_dir, "smoke_test_results.rds")
+    )
+    message("Saved smoke test results to ", normalizePath(output_dir))
+}
 
 if (any(summary_df$status == "FAIL")) {
     stop("One or more benchmark smoke tests failed.")

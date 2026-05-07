@@ -402,6 +402,7 @@ def run_spagcn(
             adj,
             init_spa=bool(init_spa),
             init=str(init),
+            n_clusters=int(n_clust),
             res=float(res_cur),
             tol=float(tol),
             lr=float(lr),

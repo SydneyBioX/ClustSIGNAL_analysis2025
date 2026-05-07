@@ -332,7 +332,8 @@ runSpatialPCA <- function(spe, samples, sparkv = 'sparkx', ncores = 1) {
         stats::setNames(vals, ids)
     }), sample_ids)
     
-    cluster_vector <- unlist(clusters, use.names = TRUE)
+    cluster_vector <- unlist(clusters, use.names = FALSE)
+    names(cluster_vector) <- unlist(lapply(clusters, names), use.names = FALSE)
     cluster_vector <- factor(cluster_vector[cell_order])
     
     embeddings <- setNames(lapply(sample_ids, function(sid) {
