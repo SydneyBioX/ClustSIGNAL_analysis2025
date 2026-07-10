@@ -32,16 +32,19 @@ library(SpatialPCA)
 library(bluster)
 
 library(aricode)
+
+# loading method wrapper functions
+source("./scripts/benchmark_funcs.R")
 ```
+
+
+
 
 # SeqFISH mouse embryo data
 
 Raw gene expression counts and metadata downloaded from [Spatial Mouse Atlas 2020](https://content.cruk.cam.ac.uk/jmlab/SpatialMouseAtlas2020/), and stored in a spe object.
 
 ```{r}
-# loading method wrapper functions
-source("./scripts/benchmark_funcs.R")
-
 spe_me <- readRDS("./spe_mouseEmbryo.Rds") # spe object of downloaded data
 ```
 
@@ -93,11 +96,12 @@ cntm_me <- lapply(sampleNames, function(x) counts(spe_me[, spe_me$embryo == x]))
 xym_me <- lapply(sampleNames, function(x) spatialCoords(spe_me[, spe_me$embryo == x]))
 
 set.seed(567)
-mem_me_bass <- peakRAM(BASS_me <- runBASS(cntm_me, xym_me, C = 23, R = 10))
+mem_me_bass <- peakRAM(bass_me <- runBASS(cntm_me, xym_me, C = 23, R = 10, 
+                                          batch = F))
 mem_me_bass <- cbind(mem_me_bass, Threads = 1, Batch_correct = FALSE,
                      Batch_by = "None", Dataset = "ME", Method = "BASS")
 
-saveRDS(BASS_me, file = "./data_outputs/benchmarkOut/BASSobj_me.Rds")
+saveRDS(bass_me, file = "./data_outputs/benchmarkOut/BASSobj_me.Rds")
 ```
 
 ```{r}
@@ -111,6 +115,54 @@ mem_me_sPCA <- cbind(mem_me_sPCA, Threads = 1, Batch_correct = FALSE,
 saveRDS(sPCA_me, file = "./data_outputs/benchmarkOut/clustList_me_sPCA.Rds")
 ```
 
+```{r}
+#### SpaGCN ####
+
+# loading python environment
+py_path <- "/pythonVENVs/SpaGCN_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+py_file <- "./scripts/benchmarking_methods_py.py"
+
+spagcn_res_me <- runSpaGCN(spe = spe_me, 
+                           sample_label = "embryo", 
+                           n_clusters = 23, SEED = 567, 
+                           py_file = py_file,
+                           python_path  = py_path)
+# spagcn_res_me$raw[[2]]$mem
+saveRDS(spagcn_res_me, file = "./data_outputs/benchmarkOut/res_me_spagcn.Rds")
+```
+
+```{r}
+#### STAGATE - modified the code to input kNN instead of radius cut-off.
+.libPaths("/enna/nobackup/biostat/Rpackages/v4")
+
+library(SpatialExperiment)
+
+datapath = "/dski/nobackup/biostat/datasets/SpatialTranscriptomics/"
+spe_me <- readRDS(paste0(datapath,  "seqFISH_SpatialMouseAtlas_mouseEmbryos/spe_mouseEmbryo.Rds"))
+# remove low quality cells
+spe_me <- spe_me[, spe_me$celltype_mapped_refined != "Low quality"] 
+spe_me$celltype_mapped_refined <- factor(spe_me$celltype_mapped_refined)
+# spe <- spe_me[, spe_me$embryo == "embryo1"]
+
+source("./scripts/benchmark_funcs.R")
+py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
+py_file <- "./scripts/benchmarking_methods_py.py"
+reticulate::use_python(py_path, required = TRUE)
+stagate_res_me <- runSTAGATE(spe = spe_me, 
+                             sample_label = "embryo", 
+                             n_clusters = 23, k_cutoff = 30,
+                             SEED = 567, n_epochs = 500,
+                             py_file = py_file,
+                             python_path  = py_path,
+                             cluster_method = "louvain")
+# stagate_res_me$raw[[2]]$mem
+saveRDS(stagate_res_me, file = "./data_outputs/benchmarkOut/res_me_stagate.Rds")
+```
+
+
+
 
 # Xenium breast cancer data
 
@@ -118,9 +170,6 @@ Raw gene expression counts and metadata downloaded from [10x Genomics website](h
 The data were stored as a MoleculeExperiment object, from which an spe object was generated. Cell type annotations were acquired from source data in [Janesick et al, 2023](https://www.nature.com/articles/s41467-023-43458-x).
 
 ```{r}
-# loading method wrapper functions
-source("./scripts/benchmark_funcs.R")
-
 spe_br <- readRDS("./spe_breastCancer.Rds") # spe object of downloaded data
 ```
 
@@ -156,16 +205,19 @@ saveRDS(banksy_br, file = "./data_outputs/benchmarkOut/spe_br_banksy.Rds")
 #   counts list - cntm_br
 #   coordinates list - xym_br
 
+# NOTE: C stack memory limit needs to be increased to 64MB before running
+
 sampleNames <- unique(spe_br$sample_id)
 cntm_br <- lapply(sampleNames, function(x) counts(spe_br[, spe_br$sample_id == x]))
 xym_br <- lapply(sampleNames, function(x) spatialCoords(spe_br[, spe_br$sample_id == x]))
 
 set.seed(567)
-mem_br_bass <- peakRAM(bass_br <- runBASS(cntm_br, xym_br, C = 19, R = 7))
+mem_br_bass <- peakRAM(bass_br <- runBASS(cntm_br, xym_br, C = 19, R = 7, 
+                                          batch = F))
 mem_br_bass <- cbind(mem_br_bass, Threads = 1, Batch_correct = FALSE,
                      Batch_by = "None", Dataset = "BR", Method = "BASS")
 
-# Error: memory issue
+saveRDS(bass_br, file = "./data_outputs/benchmarkOut/BASSobj_br.Rds")
 ```
 
 ```{r}
@@ -173,11 +225,11 @@ mem_br_bass <- cbind(mem_br_bass, Threads = 1, Batch_correct = FALSE,
 
 set.seed(567)
 mem_br_sPCA <- peakRAM(sPCA_br <- runSpatialPCA(spe_br, samples = "sample_id"))
-mem_br_sPCA <- cbind(mem_br_sPCA, Threads = 1, Batch_correct = FALSE,
-                     Batch_by = "None", Dataset = "BR", Method = "SpatialPCA")
 
-# Error: excessive runtime (> 5 days)
+# Error: memory spiked to >400 GB
 ```
+
+
 
 
 # CosMx lung cancer data 
@@ -186,22 +238,17 @@ A giotto object of processed gene expression and metadata downloaded from
 [Nanostring website](https://nanostring.com/products/cosmx-spatial-molecular-imager/ffpe-dataset/nsclc-ffpe-dataset/). The giotto object was converted to spe object.
 
 ```{r}
-# loading method wrapper functions
-source("./scripts/benchmark_funcs.R")
-
 spe_lc <- readRDS("spe_lungNSCLC.Rds") # spe object of downloaded data
 ```
 
 ```{r}
 #### ClustSIGNAL ####
 
-# batch correction performed on patient group
 set.seed(567)
 mem_lc_cSignal <- peakRAM(cSIGNAL_lc <- clustSIGNAL(
-    spe_lc, samples = "Run_Tissue_name", threads = 1, batch = TRUE, 
-    batch_by = "patient", outputs = "a"))
-mem_lc_cSignal <- cbind(mem_lc_cSignal, Threads = 1, Batch_correct = TRUE,
-                        Batch_by = "patient", Dataset = "LC", Method = "ClustSIGNAL")
+    spe_lc, samples = "Run_Tissue_name", threads = 1, outputs = "a"))
+mem_lc_cSignal <- cbind(mem_lc_cSignal, Threads = 1, Batch_correct = FALSE,
+                        Batch_by = "None", Dataset = "LC", Method = "ClustSIGNAL")
 
 saveRDS(cSIGNAL_lc, file = "./data_outputs/benchmarkOut/res_lc_cSIGNAL.Rds")
 saveRDS(cSIGNAL_lc$spe_final, file = "./data_outputs/benchmarkOut/spe_lc_cSIGNAL.Rds")
@@ -212,9 +259,9 @@ saveRDS(cSIGNAL_lc$spe_final, file = "./data_outputs/benchmarkOut/spe_lc_cSIGNAL
 
 mem_lc_banksy <- peakRAM(banksy_lc <- runBANKSY(
     spe_lc, SEED = 567, annots_label = "cell_type", 
-    sample_label = "Run_Tissue_name", batch = TRUE, batch_by = "patient"))
-mem_lc_banksy <- cbind(mem_lc_banksy, Threads = 1, Batch_correct = TRUE,
-                       Batch_by = "patient", Dataset = "LC", Method = "BANKSY")
+    sample_label = "Run_Tissue_name"))
+mem_lc_banksy <- cbind(mem_lc_banksy, Threads = 1, Batch_correct = FALSE,
+                       Batch_by = "None", Dataset = "LC", Method = "BANKSY")
 
 saveRDS(banksy_lc, file = "./data_outputs/benchmarkOut/spe_lc_banksy.Rds")
 ```
@@ -228,6 +275,8 @@ saveRDS(banksy_lc, file = "./data_outputs/benchmarkOut/spe_lc_banksy.Rds")
 #   counts list - cntm_lc
 #   coordinates list - xym_lc
 
+# NOTE: C stack memory limit needs to be increased to 64MB before running
+
 sampleNames <- unique(spe_lc$Run_Tissue_name)
 cntm_lc <- lapply(sampleNames, 
                   function(x) counts(spe_lc[, spe_lc$Run_Tissue_name == x]))
@@ -235,11 +284,12 @@ xym_lc <- lapply(sampleNames,
                  function(x) spatialCoords(spe_lc[, spe_lc$Run_Tissue_name == x]))
 
 set.seed(567)
-mem_lc_bass <- peakRAM(bass_lc <- runBASS(cntm_lc, xym_lc, C = 22, R = 9))
-mem_lc_bass <- cbind(mem_lc_bass, Threads = 1, Batch_correct = NA,
+mem_lc_bass <- peakRAM(bass_lc <- runBASS(cntm_lc, xym_lc, C = 22, R = 9,
+                                          batch = F))
+mem_lc_bass <- cbind(mem_lc_bass, Threads = 1, Batch_correct = FALSE,
                      Batch_by = "None", Dataset = "LC", Method = "BASS")
 
-# Error: memory issue
+saveRDS(bass_lc, file = "./data_outputs/benchmarkOut/BASSobj_lc.Rds")
 ```
 
 ```{r}
@@ -247,11 +297,11 @@ mem_lc_bass <- cbind(mem_lc_bass, Threads = 1, Batch_correct = NA,
 
 set.seed(567)
 mem_lc_sPCA <- peakRAM(sPCA_lc <- runSpatialPCA(spe_lc, samples = "Run_Tissue_name"))
-mem_lc_sPCA <- cbind(mem_lc_sPCA, Threads = 1, Batch_correct = FALSE,
-                     Batch_by = "None", Dataset = "LC", Method = "SpatialPCA")
 
-# Error: excessive runtime (> 4 days)
+# Error: memory spiked to >400 GB
 ```
+
+
 
 
 # MERFISH mouse hypothalamus
@@ -260,9 +310,6 @@ Raw gene expression counts and metadata downloaded from [DRYAD website](https://
 in a spe object. Only the 135 genes that were profiled on MERFISH were kept.
 
 ```{r}
-# loading method wrapper functions
-source("./scripts/benchmark_funcs.R")
-
 spe_mh <- readRDS("./spe_mouseHypothal.Rds") # spe object of downloaded data
 ```
 
@@ -331,6 +378,7 @@ mem_mh_sPCA <- cbind(mem_mh_sPCA, Threads = 1, Batch_correct = FALSE,
 
 saveRDS(sPCA_mh, file = "./data_outputs/benchmarkOut/clustList_mh_sPCA.Rds")
 ```
+
 
 
 # Combining benchmarking data
