@@ -1,5 +1,13 @@
+.mplconfig
+.rlib
+*.swp
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
 *.Rproj
+.DS_Store
+.cache
+__pycache__
+.conda-pkgs
+.conda-benchmark
