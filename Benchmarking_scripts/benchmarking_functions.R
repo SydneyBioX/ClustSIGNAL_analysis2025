@@ -111,7 +111,7 @@ runBANKSY <- function(spe, annots_label, sample_label, SEED, k_geom = c(15, 30),
 }
 
 
-runBASS <- function(cntm, xym, C, R) {
+runBASS <- function(cntm, xym, C, R, batch = T) {
     
     #### BASS parameters
     # cntm - list of counts matrices
@@ -123,11 +123,9 @@ runBASS <- function(cntm, xym, C, R) {
     BASS <- createBASSObject(cntm, xym, C, R, beta_method = "SW", 
                              init_method = "kmeans")
     # Data pre-processing
-    BASS <- BASS.preprocess(BASS, doLogNormalize = TRUE, doPCA = TRUE, 
-                            scaleFeature = TRUE, nPC = 20)
+    BASS <- BASS.preprocess(BASS, , doBatchCorrect = batch)
     # Run BASS algorithm
     BASS <- BASS.run(BASS)
-    
     # post-process posterior samples
     BASS <- BASS.postprocess(BASS)
     return (BASS)
