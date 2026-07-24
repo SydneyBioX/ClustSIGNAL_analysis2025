@@ -17,8 +17,11 @@ knitr::opts_chunk$set(echo = TRUE)
 library(SpatialExperiment)
 library(dplyr)
 library(peakRAM)
+library(anndataR)
 
 library(clustSIGNAL)
+library(scran)
+library(scater)
 
 library(Banksy)
 library(Seurat)
@@ -35,6 +38,7 @@ library(aricode)
 
 # loading method wrapper functions
 source("./scripts/benchmark_funcs.R")
+py_file <- "./scripts/benchmarking_methods_py.py"
 ```
 
 
@@ -42,7 +46,8 @@ source("./scripts/benchmark_funcs.R")
 
 # SeqFISH mouse embryo data
 
-Raw gene expression counts and metadata downloaded from [Spatial Mouse Atlas 2020](https://content.cruk.cam.ac.uk/jmlab/SpatialMouseAtlas2020/), and stored in a spe object.
+Raw gene expression counts and metadata downloaded from [Spatial Mouse Atlas 2020](https://content.cruk.cam.ac.uk/jmlab/SpatialMouseAtlas2020/), and stored 
+in a spe object.
 
 ```{r}
 spe_me <- readRDS("./spe_mouseEmbryo.Rds") # spe object of downloaded data
@@ -53,7 +58,6 @@ spe_me <- readRDS("./spe_mouseEmbryo.Rds") # spe object of downloaded data
 
 # removing low quality cells
 spe_me <- spe_me[, spe_me$celltype_mapped_refined != "Low quality"]
-
 spe_me$celltype_mapped_refined <- factor(spe_me$celltype_mapped_refined)
 ```
 
@@ -71,11 +75,11 @@ saveRDS(cSIGNAL_me$spe_final, file = "./data_outputs/benchmarkOut/spe_me_cSIGNAL
 ```
 
 ```{r}
-#### Banksy ####
+#### BANKSY ####
 
 mem_me_banksy <- peakRAM(banksy_me <- runBANKSY(
-    spe_me, SEED = 567, annots_label = "celltype_mapped_refined", 
-    sample_label = "embryo"))
+  spe_me, SEED = 567, annots_label = "celltype_mapped_refined", 
+  sample_label = "embryo"))
 mem_me_banksy <- cbind(mem_me_banksy, Threads = 1, Batch_correct = FALSE,
                        Batch_by = "None", Dataset = "ME", Method = "BANKSY")
 
@@ -86,10 +90,10 @@ saveRDS(banksy_me, file = "./data_outputs/benchmarkOut/spe_me_banksy.Rds")
 #### BASS ####
 
 # parameters:
-#   C - 23 cell types (based on manual annotations)
-#   R - 10 domains (randomly chosen value)
-#   counts list - cntm_me
-#   coordinates list - xym_me
+#   C = 23 cell types (based on manual annotations)
+#   R = 10 domains (randomly chosen value)
+#   counts list = cntm_me
+#   coordinates list = xym_me
 
 sampleNames <- unique(spe_me$embryo)
 cntm_me <- lapply(sampleNames, function(x) counts(spe_me[, spe_me$embryo == x]))
@@ -122,34 +126,26 @@ saveRDS(sPCA_me, file = "./data_outputs/benchmarkOut/clustList_me_sPCA.Rds")
 py_path <- "/pythonVENVs/SpaGCN_bench/bin/python"
 reticulate::use_python(py_path, required = TRUE)
 
-py_file <- "./scripts/benchmarking_methods_py.py"
+# parameters:
+#   n_clusters = 23 cell types (based on manual annotations)
 
-spagcn_res_me <- runSpaGCN(spe = spe_me, 
-                           sample_label = "embryo", 
-                           n_clusters = 23, SEED = 567, 
-                           py_file = py_file,
+spagcn_res_me <- runSpaGCN(spe = spe_me, sample_label = "embryo", 
+                           n_clusters = 23, SEED = 567, py_file = py_file,
                            python_path  = py_path)
-# spagcn_res_me$raw[[2]]$mem
 saveRDS(spagcn_res_me, file = "./data_outputs/benchmarkOut/res_me_spagcn.Rds")
 ```
 
 ```{r}
-#### STAGATE - modified the code to input kNN instead of radius cut-off.
-.libPaths("/enna/nobackup/biostat/Rpackages/v4")
+#### STAGATE ####
 
-library(SpatialExperiment)
-
-datapath = "/dski/nobackup/biostat/datasets/SpatialTranscriptomics/"
-spe_me <- readRDS(paste0(datapath,  "seqFISH_SpatialMouseAtlas_mouseEmbryos/spe_mouseEmbryo.Rds"))
-# remove low quality cells
-spe_me <- spe_me[, spe_me$celltype_mapped_refined != "Low quality"] 
-spe_me$celltype_mapped_refined <- factor(spe_me$celltype_mapped_refined)
-# spe <- spe_me[, spe_me$embryo == "embryo1"]
-
-source("./scripts/benchmark_funcs.R")
+# loading python environment
 py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
-py_file <- "./scripts/benchmarking_methods_py.py"
 reticulate::use_python(py_path, required = TRUE)
+
+
+# parameters:
+#   n_clusters = 23 cell types (based on manual annotations)
+
 stagate_res_me <- runSTAGATE(spe = spe_me, 
                              sample_label = "embryo", 
                              n_clusters = 23, k_cutoff = 30,
@@ -157,8 +153,59 @@ stagate_res_me <- runSTAGATE(spe = spe_me,
                              py_file = py_file,
                              python_path  = py_path,
                              cluster_method = "louvain")
-# stagate_res_me$raw[[2]]$mem
 saveRDS(stagate_res_me, file = "./data_outputs/benchmarkOut/res_me_stagate.Rds")
+```
+
+```{r}
+#### GraphST ####
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_me, sample_label = "embryo",
+                fileSavepath = "./data_outputs/annDataFiles/mouse_embryo/",
+                keep_cols = c("uniqueID", "embryo", "pos", "z", "x_global", 
+                              "y_global", "celltype_mapped_refined"))
+
+# Method run using the script in benchmarking_GraphST.py
+# Cluster labels = "./data_outputs/benchmarkOut/graphst_me.csv"
+# Memory and runtime data = "./data_outputs/benchmarkOut/mem_me_graphst.csv"
+```
+
+```{r}
+#### Combining benchmarking data ####
+
+cSIGNAL_me <- readRDS("./data_outputs/benchmarkOut/spe_me_cSIGNAL.Rds")
+banksy_me <- readRDS("./data_outputs/benchmarkOut/spe_me_banksy.Rds")
+BASS_me <- readRDS("./data_outputs/benchmarkOut/BASSobj_me.Rds")
+sPCA_me <- readRDS("./data_outputs/benchmarkOut/clustList_me_sPCA.Rds")
+graphst_me <- read.csv("./data_outputs/benchmarkOut/graphst_me.csv")
+spagcn_me <- readRDS("./data_outputs/benchmarkOut/res_me_spagcn.Rds")
+spagcn_me_clust <- setNames(unlist(spagcn_me$raw[[1]]$clusters),
+                            unlist(spagcn_me$raw[[1]]$barcodes))
+stagate_me <- readRDS("./data_outputs/benchmarkOut/res_me_stagate.Rds")
+stagate_me_clust <- setNames(unlist(stagate_me$raw[[1]]$clusters),
+                             unlist(stagate_me$raw[[1]]$barcodes))
+
+
+# combining cluster labels obtained from different clustering methods
+clustDF_me <- data.frame(Dataset = "ME",
+                         Cells = colnames(cSIGNAL_me), 
+                         Sample = cSIGNAL_me$embryo,
+                         x = spatialCoords(cSIGNAL_me)[, 1],
+                         y = spatialCoords(cSIGNAL_me)[, 2],
+                         Celltype = cSIGNAL_me$celltype_mapped_refined) %>%
+  mutate(ClustSIGNAL = cSIGNAL_me$ClustSIGNAL,
+         BANKSY = banksy_me$clust_M1_lam0.2_k50_res1,
+         BASS = factor(unlist(BASS_me@results$c)),
+         SpatialPCA = factor(unlist(sPCA_me), 
+                             levels = c(1:22, "Unlabelled"))[Cells],
+         GraphST = 
+           factor(graphst_me[order(match(graphst_me$barcode, Cells)),]$louvain),
+         # convert any NA labels to "Unlabelled"
+         SpaGCN = factor(coalesce(as.character(spagcn_me_clust[Cells]), 
+                                  "Unlabelled")),
+         STAGATE = factor(coalesce(as.character(stagate_me_clust[Cells]), 
+                                   "Unlabelled")))
+saveRDS(clustDF_me, file = "./data_outputs/benchmarkOut/BenchDF_me_update.Rds")
 ```
 
 
@@ -166,7 +213,7 @@ saveRDS(stagate_res_me, file = "./data_outputs/benchmarkOut/res_me_stagate.Rds")
 
 # Xenium breast cancer data
 
-Raw gene expression counts and metadata downloaded from [10x Genomics website](https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast).\
+Raw gene expression counts and metadata downloaded from [10x Genomics website](https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast). 
 The data were stored as a MoleculeExperiment object, from which an spe object was generated. Cell type annotations were acquired from source data in [Janesick et al, 2023](https://www.nature.com/articles/s41467-023-43458-x).
 
 ```{r}
@@ -175,6 +222,7 @@ spe_br <- readRDS("./spe_breastCancer.Rds") # spe object of downloaded data
 
 ```{r}
 #### ClustSIGNAL ####
+
 set.seed(567)
 mem_br_cSignal <- peakRAM(cSIGNAL_br <- clustSIGNAL(spe_br, samples = "sample_id", 
                                                     threads = 1, outputs = "a"))
@@ -186,10 +234,10 @@ saveRDS(cSIGNAL_br$spe_final, file = "./data_outputs/benchmarkOut/spe_br_cSIGNAL
 ```
 
 ```{r}
-#### Banksy ####
+#### BANKSY ####
 
 mem_br_banksy <- peakRAM(banksy_br <- runBANKSY(
-    spe_br, SEED = 567, annots_label = "celltype", sample_label = "sample_id"))
+  spe_br, SEED = 567, annots_label = "celltype", sample_label = "sample_id"))
 mem_br_banksy <- cbind(mem_br_banksy, Threads = 1, Batch_correct = FALSE,
                        Batch_by = "None", Dataset = "BR", Method = "BANKSY")
 
@@ -200,10 +248,10 @@ saveRDS(banksy_br, file = "./data_outputs/benchmarkOut/spe_br_banksy.Rds")
 #### BASS ####
 
 # parameters:
-#   C - 19 cell types (based on manual annotations)
-#   R - 7 domains (based on Fig. 4d in Janesick et al, 2023)
-#   counts list - cntm_br
-#   coordinates list - xym_br
+#   C = 19 cell types (based on manual annotations)
+#   R = 7 domains (based on Fig. 4d in Janesick et al, 2023)
+#   counts list = cntm_br
+#   coordinates list = xym_br
 
 # NOTE: C stack memory limit needs to be increased to 64MB before running
 
@@ -226,9 +274,90 @@ saveRDS(bass_br, file = "./data_outputs/benchmarkOut/BASSobj_br.Rds")
 set.seed(567)
 mem_br_sPCA <- peakRAM(sPCA_br <- runSpatialPCA(spe_br, samples = "sample_id"))
 
-# Error: memory spiked to >400 GB
+# Out of memory: memory spiked to >400 GB
 ```
 
+```{r}
+#### SpaGCN ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/SpaGCN_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 19 cell types (based on manual annotations)
+
+spagcn_res_br <- runSpaGCN(spe = spe_br, sample_label = "sample_id", 
+                           n_clusters = 19, SEED = 567, py_file = py_file,
+                           python_path  = py_path)
+saveRDS(spagcn_res_br, file = "./data_outputs/benchmarkOut/res_br_spagcn.Rds")
+```
+
+```{r}
+#### STAGATE ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 19 cell types (based on manual annotations)
+
+stagate_res_br <- runSTAGATE(spe = spe_br, sample_label = "sample_id", 
+                             n_clusters = 19, k_cutoff = 30, SEED = 567, 
+                             n_epochs = 500, py_file = py_file,
+                             python_path = py_path, cluster_method = "louvain")
+
+saveRDS(stagate_res_br, file = "./data_outputs/benchmarkOut/res_br_stagate.Rds")
+```
+
+```{r}
+#### GraphST ####
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_br, sample_label = "sample_id",
+                fileSavepath = "./data_outputs/annDataFiles/breast_cancer/",
+                keep_cols = c("sample_id", "cell_id", "x_location", 
+                              "y_location", "celltype"))
+
+# Method run using the script in benchmarking_GraphST.py
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### Combining benchmarking data ####
+
+cSIGNAL_br <- readRDS("./data_outputs/benchmarkOut/spe_br_cSIGNAL.Rds")
+banksy_br <- readRDS("./data_outputs/benchmarkOut/spe_br_banksy.Rds")
+BASS_br <- readRDS("./data_outputs/benchmarkOut/BASSobj_br.Rds")
+spagcn_br <- readRDS("./data_outputs/benchmarkOut/res_br_spagcn.Rds")
+spagcn_br_clust <- setNames(unlist(spagcn_br$raw[[1]]$clusters),
+                            unlist(spagcn_br$raw[[1]]$barcodes))
+stagate_br <- readRDS("./data_outputs/benchmarkOut/res_br_stagate.Rds")
+stagate_br_clust <- setNames(unlist(stagate_br$raw[[1]]$clusters),
+                             unlist(stagate_br$raw[[1]]$barcodes))
+
+# combining cluster labels obtained from different clustering methods
+clustDF_br <- data.frame(Dataset = "BR",
+                         Cells = colnames(cSIGNAL_br), 
+                         Sample = cSIGNAL_br$sample_id,
+                         x = spatialCoords(cSIGNAL_br)[, 1],
+                         y = spatialCoords(cSIGNAL_br)[, 2],
+                         Celltype = cSIGNAL_br$celltype) %>%
+  mutate(ClustSIGNAL = cSIGNAL_br$ClustSIGNAL,
+         BANKSY = banksy_br$clust_M1_lam0.2_k50_res1,
+         BASS = factor(unlist(BASS_br@results$c)),
+         SpatialPCA = NA,
+         GraphST = NA,
+         # convert any NA labels to "Unlabelled"
+         SpaGCN = factor(coalesce(as.character(spagcn_br_clust[Cells]), 
+                                  "Unlabelled")),
+         STAGATE = factor(coalesce(as.character(stagate_br_clust[Cells]), 
+                                   "Unlabelled")))
+
+saveRDS(clustDF_br, file = "./data_outputs/benchmarkOut/BenchDF_br_update.Rds")
+```
 
 
 
@@ -238,7 +367,7 @@ A giotto object of processed gene expression and metadata downloaded from
 [Nanostring website](https://nanostring.com/products/cosmx-spatial-molecular-imager/ffpe-dataset/nsclc-ffpe-dataset/). The giotto object was converted to spe object.
 
 ```{r}
-spe_lc <- readRDS("spe_lungNSCLC.Rds") # spe object of downloaded data
+spe_lc <- readRDS("./spe_lungNSCLC.Rds") # spe object of downloaded data
 ```
 
 ```{r}
@@ -246,7 +375,7 @@ spe_lc <- readRDS("spe_lungNSCLC.Rds") # spe object of downloaded data
 
 set.seed(567)
 mem_lc_cSignal <- peakRAM(cSIGNAL_lc <- clustSIGNAL(
-    spe_lc, samples = "Run_Tissue_name", threads = 1, outputs = "a"))
+  spe_lc, samples = "Run_Tissue_name", threads = 1, outputs = "a"))
 mem_lc_cSignal <- cbind(mem_lc_cSignal, Threads = 1, Batch_correct = FALSE,
                         Batch_by = "None", Dataset = "LC", Method = "ClustSIGNAL")
 
@@ -255,11 +384,11 @@ saveRDS(cSIGNAL_lc$spe_final, file = "./data_outputs/benchmarkOut/spe_lc_cSIGNAL
 ```
 
 ```{r}
-#### Banksy ####
+#### BANKSY ####
 
 mem_lc_banksy <- peakRAM(banksy_lc <- runBANKSY(
-    spe_lc, SEED = 567, annots_label = "cell_type", 
-    sample_label = "Run_Tissue_name"))
+  spe_lc, SEED = 567, annots_label = "cell_type", 
+  sample_label = "Run_Tissue_name"))
 mem_lc_banksy <- cbind(mem_lc_banksy, Threads = 1, Batch_correct = FALSE,
                        Batch_by = "None", Dataset = "LC", Method = "BANKSY")
 
@@ -270,10 +399,10 @@ saveRDS(banksy_lc, file = "./data_outputs/benchmarkOut/spe_lc_banksy.Rds")
 #### BASS ####
 
 # parameters:
-#   C - 22 cell types (based on manual annotations)
-#   R - 9 domains (based on niches in dataset)
-#   counts list - cntm_lc
-#   coordinates list - xym_lc
+#   C = 22 cell types (based on manual annotations)
+#   R = 9 domains (based on niches in dataset)
+#   counts list = cntm_lc
+#   coordinates list = xym_lc
 
 # NOTE: C stack memory limit needs to be increased to 64MB before running
 
@@ -298,7 +427,92 @@ saveRDS(bass_lc, file = "./data_outputs/benchmarkOut/BASSobj_lc.Rds")
 set.seed(567)
 mem_lc_sPCA <- peakRAM(sPCA_lc <- runSpatialPCA(spe_lc, samples = "Run_Tissue_name"))
 
-# Error: memory spiked to >400 GB
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### SpaGCN ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/SpaGCN_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 22 cell types (based on manual annotations)
+#   l_search_start = 0.001 (reduced from default 0.01 to run the method)
+
+spagcn_res_lc <- runSpaGCN(spe = spe_lc, sample_label = "Run_Tissue_name", 
+                           n_clusters = 22, SEED = 567, l_search_start = 0.001,
+                           py_file = py_file, python_path  = py_path)
+
+saveRDS(spagcn_res_lc, file = "./data_outputs/benchmarkOut/res_lc_spagcn.Rds")
+```
+
+```{r}
+#### STAGATE ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 22 cell types (based on manual annotations)
+
+stagate_res_lc <- runSTAGATE(spe = spe_lc, sample_label = "Run_Tissue_name", 
+                             n_clusters = 22, k_cutoff = 30, SEED = 567, 
+                             n_epochs = 500, py_file = py_file, 
+                             python_path  = py_path, cluster_method = "louvain")
+
+saveRDS(stagate_res_lc, file = "./data_outputs/benchmarkOut/res_lc_stagate.Rds")
+```
+
+```{r}
+#### GraphST ####
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_lc, sample_label = "Run_Tissue_name",
+                fileSavepath = "./data_outputs/annDataFiles/lung_cancer/",
+                keep_cols = c("cell_ID", "fov", "Slide_name", "tissue", 
+                              "Run_name", "Run_Tissue_name", "patient", 
+                              "cell_type", "niche", "prop_tumor_in_100_neighbors"))
+
+# Method run using the script in benchmarking_GraphST.py
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### Combining benchmarking data ####
+
+cSIGNAL_lc <- readRDS("./data_outputs/benchmarkOut/spe_lc_cSIGNAL.Rds")
+banksy_lc <- readRDS("./data_outputs/benchmarkOut/spe_lc_banksy.Rds")
+BASS_lc <- readRDS("./data_outputs/benchmarkOut/BASSobj_lc.Rds")
+spagcn_lc <- readRDS("./data_outputs/benchmarkOut/res_lc_spagcn.Rds")
+spagcn_lc_clust <- setNames(unlist(spagcn_lc$raw[[1]]$clusters),
+                            unlist(spagcn_lc$raw[[1]]$barcodes))
+stagate_lc <- readRDS("./data_outputs/benchmarkOut/res_lc_stagate.Rds")
+stagate_lc_clust <- setNames(unlist(stagate_lc$raw[[1]]$clusters),
+                             unlist(stagate_lc$raw[[1]]$barcodes))
+
+# combining cluster labels obtained from different clustering methods
+clustDF_lc <- data.frame(Dataset = "LC",
+                         Cells = colnames(cSIGNAL_lc), 
+                         Sample = cSIGNAL_lc$Run_Tissue_name,
+                         x = spatialCoords(cSIGNAL_lc)[, 1],
+                         y = spatialCoords(cSIGNAL_lc)[, 2],
+                         Celltype = factor(cSIGNAL_lc$cell_type)) %>%
+  mutate(ClustSIGNAL = cSIGNAL_lc$ClustSIGNAL,
+         BANKSY = banksy_lc$clust_PCA_M1_lam0.2_k50_res1,
+         BASS = factor(unlist(BASS_lc@results$c)),
+         SpatialPCA = NA,
+         GraphST = NA,
+         # convert any NA labels to "Unlabelled"
+         SpaGCN = factor(coalesce(as.character(spagcn_lc_clust[Cells]), 
+                                  "Unlabelled")),
+         STAGATE = factor(coalesce(as.character(stagate_lc_clust[Cells]), 
+                                   "Unlabelled")))
+
+saveRDS(clustDF_lc, file = "./data_outputs/benchmarkOut/BenchDF_lc_update.Rds")
 ```
 
 
@@ -318,8 +532,14 @@ spe_mh <- readRDS("./spe_mouseHypothal.Rds") # spe object of downloaded data
 
 # removing ambiguous cells - possible doublets
 spe_mh <- spe_mh[, spe_mh$Cell_class != "Ambiguous"]
-
 spe_mh$Cell_class <- factor(spe_mh$Cell_class)
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_mh, sample_label = "samples",
+                fileSavepath = "./data_outputs/annDataFiles/mouse_brain/",
+                keep_cols = c("Cell_ID", "Animal_ID", "Animal_sex", "Behavior",
+                              "Bregma", "Cell_class", "Neuron_cluster_ID", 
+                              "samples"))
 ```
 
 ```{r}
@@ -336,9 +556,10 @@ saveRDS(cSIGNAL_mh$spe_final, file = "./data_outputs/benchmarkOut/spe_mh_cSIGNAL
 ```
 
 ```{r}
-#### Banksy ####
+#### BANKSY ####
+
 mem_mh_banksy <- peakRAM(banksy_mh <- runBANKSY(
-    spe_mh, SEED = 567, annots_label = "Cell_class", sample_label = "samples"))
+  spe_mh, SEED = 567, annots_label = "Cell_class", sample_label = "samples"))
 mem_mh_banksy <- cbind(mem_mh_banksy, Threads = 1, Batch_correct = FALSE,
                        Batch_by = "None", Dataset = "MH", Method = "BANKSY")
 
@@ -349,10 +570,10 @@ saveRDS(banksy_mh, file = "./data_outputs/benchmarkOut/spe_mh_banksy.Rds")
 #### BASS ####
 
 # parameters:
-#   C - 16 cell types (based on manual annotations)
-#   R - 9 domains (based on Fig. 3e in Moffitt et al, 2018)
-#   counts list - cntm_mh
-#   coordinates list - xym_mh
+#   C = 16 cell types (based on manual annotations)
+#   R = 9 domains (based on Fig. 3e in Moffitt et al, 2018)
+#   counts list = cntm_mh
+#   coordinates list = xym_mh
 
 sampleNames <- unique(spe_mh$samples)
 cntm_mh <- lapply(sampleNames, 
@@ -379,115 +600,573 @@ mem_mh_sPCA <- cbind(mem_mh_sPCA, Threads = 1, Batch_correct = FALSE,
 saveRDS(sPCA_mh, file = "./data_outputs/benchmarkOut/clustList_mh_sPCA.Rds")
 ```
 
+```{r}
+#### SpaGCN ####
 
+# loading python environment
+py_path <- "../../pythonVENVs/SpaGCN_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
 
-# Combining benchmarking data
+# parameters:
+#   C = 16 cell types (based on manual annotations)
+
+spagcn_res_mh <- runSpaGCN(spe = spe_mh, sample_label = "samples", 
+                           n_clusters = 16, SEED = 567, py_file = py_file,
+                           python_path = py_path)
+
+saveRDS(spagcn_res_mh, file = "./data_outputs/benchmarkOut/res_mh_spagcn.Rds")
+```
 
 ```{r}
-#### clusters ####
+#### STAGATE ####
 
-# clusters from runs on mouse embryo data
-clustDF_me <- data.frame(Dataset = "ME",
-                         Cells = colnames(spe_me), 
-                         Sample = spe_me$embryo,
-                         x = spatialCoords(spe_me)[, 1],
-                         y = spatialCoords(spe_me)[, 2],
-                         Celltype = spe_me$celltype_mapped_refined,
-                         BASS = unlist(BASS_me@results$c) |> factor(),
-                         BANKSY = banksy_me$clust_M1_lam0.2_k50_res1,
-                         SpatialPCA = factor(unlist(sPCA_me), 
-                                             levels = c(1:22, "Unlabelled")),
-                         ClustSIGNAL = cSIGNAL_me$spe_final$ClustSIGNAL)
-# clusters from runs on breast cancer data
-clustDF_br <- data.frame(Dataset = "BR",
-                         Cells = colnames(spe_br), 
-                         Sample = spe_br$sample_id,
-                         x = spatialCoords(spe_br)[, 1],
-                         y = spatialCoords(spe_br)[, 2],
-                         Celltype = spe_br$celltype,
-                         BASS = "NA",
-                         BANKSY = banksy_br$clust_M1_lam0.2_k50_res1,
-                         SpatialPCA = "NA",
-                         ClustSIGNAL = cSIGNAL_br$spe_final$ClustSIGNAL)
-# clusters from runs on lung cancer data
-clustDF_lc <- data.frame(Dataset = "LC",
-                         Cells = colnames(spe_lc), 
-                         Sample = spe_lc$Run_Tissue_name,
-                         x = spatialCoords(spe_lc)[, 1],
-                         y = spatialCoords(spe_lc)[, 2],
-                         Celltype = spe_lc$cell_type,
-                         BASS = "NA",
-                         BANKSY = banksy_lc$clust_PCA_harmony_k50_res1,
-                         SpatialPCA = "NA",
-                         ClustSIGNAL = cSIGNAL_lc$spe_final$ClustSIGNAL)
-# clusters from runs on mouse hypothalamus data
+# loading python environment
+py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 16 cell types (based on manual annotations)
+
+stagate_res_mh <- runSTAGATE(spe = spe_mh, sample_label = "samples", 
+                             n_clusters = 16, k_cutoff = 30, SEED = 567, 
+                             n_epochs = 500, py_file = py_file, 
+                             python_path = py_path, cluster_method = "louvain")
+
+saveRDS(stagate_res_mh, file = "./data_outputs/benchmarkOut/res_mh_stagate.Rds")
+```
+
+```{r}
+#### GraphST ####
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_mh, sample_label = "samples",
+                fileSavepath = "./data_outputs/annDataFiles/mouse_brain/",
+                keep_cols = c("Cell_ID", "Animal_ID", "Animal_sex", "Behavior",
+                              "Bregma", "Cell_class", "Neuron_cluster_ID", 
+                              "samples" ))
+
+# Method run using the script in benchmarking_GraphST.py
+
+# Exceeded the maximum allowed runtime: runtime >4 days
+```
+
+```{r}
+#### Combining benchmarking data ####
+library(SpatialExperiment)
+library(dplyr)
+
+cSIGNAL_mh <- readRDS("./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
+banksy_mh <- readRDS("./data_outputs/benchmarkOut/spe_mh_banksy.Rds")
+BASS_mh <- readRDS("./data_outputs/benchmarkOut/BASSobj_mh.Rds")
+sPCA_mh <- readRDS("./data_outputs/benchmarkOut/clustList_mh_sPCA.Rds")
+spagcn_mh <- readRDS("./data_outputs/benchmarkOut/res_mh_spagcn.Rds")
+spagcn_mh_clust <- setNames(unlist(spagcn_mh$raw[[1]]$clusters),
+                            unlist(spagcn_mh$raw[[1]]$barcodes))
+stagate_mh <- readRDS("./data_outputs/benchmarkOut/res_mh_stagate.Rds")
+stagate_mh_clust <- setNames(unlist(stagate_mh$raw[[1]]$clusters),
+                             unlist(stagate_mh$raw[[1]]$barcodes))
+
+# combining cluster labels obtained from different clustering methods
 clustDF_mh <- data.frame(Dataset = "MH",
-                         Cells = colnames(spe_mh), 
-                         Sample = spe_mh$samples,
-                         x = spatialCoords(spe_mh)[, 1],
-                         y = spatialCoords(spe_mh)[, 2],
-                         Celltype = spe_mh$Cell_class,
-                         BASS = unlist(bass_mh@results$c) |> factor(),
-                         BANKSY = banksy_mh$clust_M1_lam0.2_k50_res1,
-                         SpatialPCA = factor(unlist(sPCA_mh),
-                                             levels = c(1:12, "Unlabelled")),
-                         ClustSIGNAL = cSIGNAL_mh$spe_final$ClustSIGNAL)
-# all cluster data combined
-clustDF <- rbind(clustDF_me, clustDF_br, clustDF_mh, clustDF_lc)
-saveRDS(clustDF, "./data_outputs/benchmarkOut/BenchDF.Rds")
+                         Cells = colnames(cSIGNAL_mh), 
+                         Sample = cSIGNAL_mh$samples,
+                         x = spatialCoords(cSIGNAL_mh)[, 1],
+                         y = spatialCoords(cSIGNAL_mh)[, 2],
+                         Celltype = cSIGNAL_mh$Cell_class) %>%
+  mutate(ClustSIGNAL = cSIGNAL_mh$ClustSIGNAL,
+         BANKSY = banksy_mh$clust_M1_lam0.2_k50_res1,
+         BASS = factor(unlist(BASS_mh@results$c)),
+         SpatialPCA = factor(unlist(sPCA_mh), 
+                             levels = c(1:12, "Unlabelled"))[Cells],
+         GraphST = NA,
+         # convert any NA labels to "Unlabelled"
+         SpaGCN = factor(coalesce(as.character(spagcn_mh_clust[Cells]), 
+                                  "Unlabelled")),
+         STAGATE = factor(coalesce(as.character(stagate_mh_clust[Cells]), 
+                                   "Unlabelled")))
+
+saveRDS(clustDF_mh, file = "./data_outputs/benchmarkOut/BenchDF_mh_update.Rds")
+```
+
+
+
+
+# Stereo-seq human ovarian cancer
+
+Gene expression and metadata were downloaded from https://spatch.pku-genomics.org/#/dataset/stereo, and stored in a spe object.
+
+```{r}
+spe_oc <- readRDS("./spe_ovarianCancer.Rds") # spe object of downloaded data
 ```
 
 ```{r}
-#### clustering performance metrics ####
+#### data pre-processing ####
 
-metrics <- clustDF %>% 
-    group_by(Dataset, Sample) %>% # for each sample in each dataset
-    summarise(BASS_ari = ARI(Celltype, BASS), # BASS ari
-              BANKSY_ari = ARI(Celltype, BANKSY), # BANKSY ari
-              SpatialPCA_ari = ARI(Celltype, SpatialPCA), # SpatialPCA ari
-              ClustSIGNAL_ari = ARI(Celltype, ClustSIGNAL), # ClustSIGNAL ari
-              Annotation_clust = length(unique(Celltype)), # total annotations
-              BASS_clust = length(unique(BASS)), # total BASS clusters
-              BANKSY_clust = length(unique(BANKSY)), # total BANKSY clusters
-              SpatialPCA_clust = length(unique(SpatialPCA)), # total SpatialPCA clusters
-              ClustSIGNAL_clust = length(unique(ClustSIGNAL)) # total ClustSIGNAL clusters
-    )  %>% 
-    as.data.frame()
-saveRDS(metrics, "./data_outputs/benchmarkOut/clustering_metrics.Rds")
+# remove unlabeled cell types
+spe_oc <- spe_oc[, !(is.na(spe_oc$annotation))]
+# keeping only transcriptome data
+spe_oc <- spe_oc[, spe_oc$codex_common == 1]
+# removing genes with no expression in any cells
+zero_genes <- rowSums(counts(spe_oc)) == 0
+spe_oc <- spe_oc[!zero_genes, ]
+# converting expression dgRMatrix to dgCMatrix format
+col_counts <- as(as(counts(spe_oc), "TsparseMatrix"), "CsparseMatrix")
+assay(spe_oc, "counts") <- col_counts
 ```
 
+```{r}
+#### ClustSIGNAL ####
+set.seed(567)
+mem_cSignal <- peakRAM(cSIGNAL <- runClustSIGNAL(spe_oc, samples = "sample_id", 
+                                                 threads = 1, outputs = "a", 
+                                                 hvgs = T))
+mem_cSignal <- cbind(mem_cSignal, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "OC", Method = "ClustSIGNAL")
+saveRDS(mem_cSignal, file = "./data_outputs/benchmarkOut/mem_oc_cSignal.Rds")
+saveRDS(cSIGNAL$spe_final, file = "./data_outputs/benchmarkOut/spe_oc_cSIGNAL.Rds")
+```
+
+```{r}
+#### BANKSY ####
+
+mem_banksy <- peakRAM(banksy <- runBANKSY(spe_oc, SEED = 567, 
+                                          annots_label = "annotation",
+                                          sample_label = "sample_id", hvgs = T))
+mem_banksy <- cbind(mem_banksy, Threads = 1, Batch_correct = FALSE,
+                    Batch_by = "None", Dataset = "OC", Method = "Banksy")
+saveRDS(mem_banksy, file = "./data_outputs/benchmarkOut/mem_oc_banksy.Rds")
+saveRDS(banksy, file = "./data_outputs/benchmarkOut/spe_oc_banksy.Rds")
+```
+
+```{r}
+#### BASS ####
+
+# parameters:
+#   C = 13 cell types (based on manual annotations)
+#   R = 5 domains (based on manual annotations)
+#   counts list - cntm_oc
+#   coordinates list - xym_oc
+
+# NOTE: C stack memory limit needs to be increased to 64MB before running
+
+sampleNames <- unique(spe_oc$sample_id)
+cntm_oc <- lapply(sampleNames, 
+                  function(x) counts(spe_oc[, spe_oc$sample_id == x]))
+xym_oc <- lapply(sampleNames, 
+                 function(x) spatialCoords(spe_oc[, spe_oc$sample_id == x]))
+
+set.seed(567)
+mem_bass <- peakRAM(bass <- runBASS(cntm_oc, xym_oc, C = 13, R = 5, batch = F))
+mem_bass <- cbind(mem_bass, Threads = 1, Batch_correct = FALSE,
+                  Batch_by = "None", Dataset = "OC", Method = "BASS")
+
+saveRDS(mem_bass, file = "./data_outputs/benchmarkOut/mem_oc_bass.Rds")
+saveRDS(bass, file = "./data_outputs/benchmarkOut/BASSobj_oc.Rds")
+```
+
+```{r}
+#### SpatialPCA ####
+
+set.seed(567)
+mem_sPCA <- peakRAM(sPCA <- runSpatialPCA(spe_oc, samples = "sample_id"))
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### SpaGCN ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/SpaGCN_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 13 cell types (based on manual annotations)
+
+spagcn_res_oc <- runSpaGCN(spe = spe_oc, sample_label = "sample_id", 
+                           n_clusters = 13, SEED = 567, py_file = py_file,
+                           python_path  = py_path)
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### STAGATE ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 13 cell types (based on manual annotations)
+
+stagate_res_oc <- runSTAGATE(spe = spe_oc, sample_label = "sample_id", 
+                             n_clusters = 13, k_cutoff = 30, SEED = 567, 
+                             n_epochs = 500, py_file = py_file,
+                             python_path  = py_path, cluster_method = "louvain")
+
+saveRDS(stagate_res_oc, file = "./data_outputs/benchmarkOut/res_oc_stagate.Rds")
+```
+
+```{r}
+#### GraphST ####
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_oc, sample_label = "sample_id",
+                fileSavepath = "./data_outputs/annDataFiles/ovarian_cancer/",
+                keep_cols = c("annotation", "spatial_cluster", "sample_id"))
+
+# Method run using the script in benchmarking_GraphST.py
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### Combining benchmarking data ####
+
+cSIGNAL_oc <- readRDS("./data_outputs/benchmarkOut/spe_oc_cSIGNAL.Rds")
+banksy_oc <- readRDS("./data_outputs/benchmarkOut/spe_oc_banksy.Rds")
+BASS_oc <- readRDS("./data_outputs/benchmarkOut/BASSobj_oc.Rds")
+stagate_oc <- readRDS("./data_outputs/benchmarkOut/res_oc_stagate.Rds")
+stagate_oc_clust <- setNames(unlist(stagate_oc$raw[[1]]$clusters),
+                             unlist(stagate_oc$raw[[1]]$barcodes))
+
+# combining cluster labels obtained from different clustering methods
+clustDF_oc <- data.frame(Dataset = "OC",
+                         Cells = colnames(cSIGNAL_oc), 
+                         Sample = cSIGNAL_oc$sample_id,
+                         x = spatialCoords(cSIGNAL_oc)[, 1],
+                         y = spatialCoords(cSIGNAL_oc)[, 2],
+                         Celltype = cSIGNAL_oc$annotation,
+                         Niche = cSIGNAL_oc$spatial_cluster) %>%
+  mutate(ClustSIGNAL = cSIGNAL_oc$ClustSIGNAL,
+         BANKSY = banksy_oc$clust_PCA_M1_lam0.2_k50_res1,
+         BASS = factor(unlist(BASS_oc@results$c)),
+         SpatialPCA = NA,
+         GraphST = NA,
+         SpaGCN = NA,
+         # convert any NA labels to "Unlabelled"
+         STAGATE = factor(coalesce(as.character(stagate_oc_clust[Cells]), 
+                                   "Unlabelled")))
+
+saveRDS(clustDF_oc, file = "./data_outputs/benchmarkOut/BenchDF_oc.Rds")
+```
+
+
+
+
+# VisiumHD human COAD
+
+Gene expression and metadata were downloaded from https://spatch.pku-genomics.org/#/dataset/visium, and stored in a spe object.
+
+```{r}
+spe_coad <- readRDS("./spe_colonCancer.Rds")
+```
+
+```{r}
+#### data pre-processing ####
+
+# remove unlabeled cell types
+spe_coad <- spe_coad[, !(is.na(spe_coad$annotation))]
+# keeping only transcriptome data
+spe_coad <- spe_coad[, spe_coad$codex_common == 1]
+# removing genes with no expression in any cells
+zero_genes <- rowSums(counts(spe_coad)) == 0
+spe_coad <- spe_coad[!zero_genes, ]
+# converting expression dgRMatrix to dgCMatrix format
+col_counts <- as(as(counts(spe_coad), "TsparseMatrix"), "CsparseMatrix")
+assay(spe_coad, "counts") <- col_counts
+
+# adding logcounts
+spe_coad <- logNormCounts(spe_coad)
+```
+
+```{r}
+#### ClustSIGNAL ####
+
+set.seed(567)
+mem_cSignal <- peakRAM(cSIGNAL <- runClustSIGNAL(spe_coad, samples = "sample_id", 
+                                                 threads = 1, outputs = "a", 
+                                                 hvgs = T))
+mem_cSignal <- cbind(mem_cSignal, Threads = 1, Batch_correct = FALSE,
+                     Batch_by = "None", Dataset = "COAD", Method = "ClustSIGNAL")
+saveRDS(mem_cSignal, file = "./data_outputs/benchmarkOut/mem_coad_cSignal.Rds")
+saveRDS(cSIGNAL$spe_final, file = "./data_outputs/benchmarkOut/spe_coad_cSIGNAL.Rds")
+```
+
+```{r}
+#### BANKSY ####
+
+mem_banksy <- peakRAM(banksy <- runBANKSY(spe_coad, SEED = 567, 
+                                          annots_label = "annotation",
+                                          sample_label = "sample_id", hvgs = T))
+mem_banksy <- cbind(mem_banksy, Threads = 1, Batch_correct = FALSE,
+                    Batch_by = "None", Dataset = "COAD", Method = "Banksy")
+saveRDS(mem_banksy, file = "./data_outputs/benchmarkOut/mem_coad_banksy.Rds")
+saveRDS(banksy, file = "./data_outputs/benchmarkOut/spe_coad_banksy.Rds")
+```
+
+```{r}
+#### BASS ####
+
+# parameters:
+#   C = 16 cell types (based on manual annotations)
+#   R = 8 domains (based on manual annotations)
+#   counts list = cntm_coad
+#   coordinates list = xym_coad
+
+# NOTE: C stack memory limit needs to be increased to 64MB before running
+
+# Run started on 5 Jul ~3pm - stopping run at ~1 pm 9 Jul
+sampleNames <- unique(spe_coad$sample_id)
+cntm_coad <- lapply(sampleNames, 
+                    function(x) counts(spe_coad[, spe_coad$sample_id == x]))
+xym_coad <- lapply(sampleNames, 
+                   function(x) spatialCoords(spe_coad[, spe_coad$sample_id == x]))
+set.seed(567)
+mem_bass <- peakRAM(bass <- runBASS(cntm, xym, C = 16, R = 8))
+
+# Exceeded the maximum allowed runtime: runtime >4 days
+```
+
+```{r}
+#### SpatialPCA ####
+
+set.seed(567)
+mem_sPCA <- peakRAM(sPCA <- runSpatialPCA(spe_coad, samples = "sample_id"))
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### SpaGCN #### 
+
+# loading python environment
+py_path <- "../../pythonVENVs/SpaGCN_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 16 cell types (based on manual annotations)
+
+spagcn_res_coad <- runSpaGCN(spe = spe_coad, sample_label = "sample_id", 
+                             n_clusters = 16, SEED = 567, py_file = py_file,
+                             python_path = py_path)
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### STAGATE ####
+
+# loading python environment
+py_path <- "../../pythonVENVs/STAGATE_pyG_bench/bin/python"
+reticulate::use_python(py_path, required = TRUE)
+
+# parameters:
+#   C = 16 cell types (based on manual annotations)
+
+stagate_res_coad <- runSTAGATE(spe = spe_coad, sample_label = "sample_id", 
+                               n_clusters = 16, k_cutoff = 30, SEED = 567, 
+                               n_epochs = 500, py_file = py_file,
+                               python_path = py_path, cluster_method = "louvain")
+
+saveRDS(stagate_res_coad, file = "./data_outputs/benchmarkOut/res_coad_stagate.Rds")
+```
+
+```{r}
+#### GraphST ####
+
+# creating anndata files for GraphST runs
+create_annFiles(spe = spe_coad, sample_label = "sample_id",
+                fileSavepath = "./data_outputs/annDataFiles/colon_cancer/",
+                keep_cols = c("annotation", "spatial_cluster", "sample_id"))
+
+# Method run using the script in benchmarking_GraphST.py
+
+# Out of memory: memory spiked to >400 GB
+```
+
+```{r}
+#### Combining benchmarking data ####
+
+cSIGNAL_coad <- readRDS("./data_outputs/benchmarkOut/spe_coad_cSIGNAL.Rds")
+banksy_coad <- readRDS("./data_outputs/benchmarkOut/spe_coad_banksy.Rds")
+stagate_coad <- readRDS("./data_outputs/benchmarkOut/res_coad_stagate.Rds")
+stagate_coad_clust <- setNames(unlist(stagate_coad$raw[[1]]$clusters),
+                               unlist(stagate_coad$raw[[1]]$barcodes))
+
+# combining cluster labels obtained from different clustering methods
+clustDF_coad <- data.frame(Dataset = "COAD",
+                         Cells = colnames(cSIGNAL_coad), 
+                         Sample = cSIGNAL_coad$sample_id,
+                         x = spatialCoords(cSIGNAL_coad)[, 1],
+                         y = spatialCoords(cSIGNAL_coad)[, 2],
+                         Celltype = cSIGNAL_coad$annotation,
+                         Niche = cSIGNAL_coad) %>%
+  mutate(ClustSIGNAL = cSIGNAL_coad$ClustSIGNAL,
+         BANKSY = banksy_coad$clust_PCA_M1_lam0.2_k50_res1,
+         BASS = NA,
+         SpatialPCA = NA,
+         GraphST = NA,
+         SpaGCN = NA,
+         # convert any NA labels to "Unlabelled"
+         STAGATE = factor(coalesce(as.character(stagate_coad_clust[Cells]), 
+                                   "Unlabelled")))
+
+saveRDS(clustDF_coad, file = "./data_outputs/benchmarkOut/BenchDF_coad.Rds")
+```
+
+
+
+
+# Clustering metrics
+
+```{r}
+# loading data frame containing cluster labels and other metadata
+clustDF_me <- readRDS("./data_outputs/benchmarkOut/BenchDF_me_update.Rds")
+clustDF_br <- readRDS("./data_outputs/benchmarkOut/BenchDF_br_update.Rds")
+clustDF_lc <- readRDS("./data_outputs/benchmarkOut/BenchDF_lc_update.Rds")
+clustDF_mh <- readRDS("./data_outputs/benchmarkOut/BenchDF_mh_update.Rds")
+clustDF_oc <- readRDS("./data_outputs/benchmarkOut/BenchDF_oc.Rds")
+clustDF_coad <- readRDS("./data_outputs/benchmarkOut/BenchDF_coad.Rds")
+
+data_list <- list(clustDF_me, clustDF_br, clustDF_lc, clustDF_mh, clustDF_oc,
+                  clustDF_coad)
+
+metrics_list <- lapply(data_list, function(df) {
+
+  # NAs in cluster label columns indicate the method did not run on the dataset
+  # checking for NAs when calculating ARI 
+  check_ari <- function(celltype, cluster) {
+    if (all(is.na(cluster))) {
+      return(NA)
+    }
+    return(ARI(celltype, cluster))
+  }
+  
+  # checking for NAs when calculating cluster number 
+  check_count <- function(cluster) {
+    if (all(is.na(cluster))) {
+      return(NA)
+    }
+    return(length(unique(cluster)))
+  }
+  
+  # summarising information
+  df %>% 
+    group_by(Dataset, Sample) %>% 
+    summarise(
+      # ARI values
+      ClustSIGNAL_ari = check_ari(Celltype, ClustSIGNAL),
+      BANKSY_ari = check_ari(Celltype, BANKSY),
+      BASS_ari = check_ari(Celltype, BASS),
+      SpatialPCA_ari = check_ari(Celltype, SpatialPCA), 
+      GraphST_ari = check_ari(Celltype, GraphST),
+      SpaGCN_ari = check_ari(Celltype, SpaGCN),
+      STAGATE_ari = check_ari(Celltype, STAGATE),
+      
+      # total prior annotations
+      Annotation_clust = length(unique(Celltype)), 
+      
+      # total number of clusters
+      ClustSIGNAL_clust = check_count(ClustSIGNAL),
+      BANKSY_clust = check_count(BANKSY),
+      BASS_clust = check_count(BASS),
+      SpatialPCA_clust = check_count(SpatialPCA),
+      GraphST_clust = check_count(GraphST),
+      SpaGCN_clust = check_count(SpaGCN),
+      STAGATE_clust = check_count(STAGATE),
+      
+      .groups = "drop") %>% 
+    as.data.frame()
+})
+
+metrics_out <- do.call(rbind, metrics_list)
+
+saveRDS(metrics_out, "./data_outputs/benchmarkOut/clustering_metrics_update.Rds")
+```
+
+
+
+
+# Computational resources
 
 ```{r}
 #### computational performance metrics ####
 
-# combining all memory usage and runtime data
-all_resources <- rbind(mem_me_banksy, mem_me_bass, mem_me_cSIGNAL, mem_me_sPCA,
-                       mem_br_banksy, mem_br_cSIGNAL, 
-                       mem_lc_banksy, mem_lc_cSIGNAL,
-                       mem_mh_banksy, mem_mh_bass, mem_mh_cSIGNAL, mem_mh_sPCA)
-all_resources <- all_resources[, -c(1)] # removing generic function column
-all_resources$Method <- factor(all_resources$Method, 
-                               levels = c("ClustSIGNAL", "BANKSY", "BASS",
-                                          "SpatialPCA"))
+# information from ClustSIGNAL, BANKSY, BASS, SpatialPCA runs
+all_resources <- rbind(mem_me_banksy, mem_br_banksy, mem_lc_banksy, 
+                       mem_mh_banksy, mem_oc_banksy, mem_coad_banksy, 
+                       mem_me_bass, mem_br_bass, mem_lc_bass, mem_mh_bass, 
+                       mem_oc_bass, 
+                       mem_me_cSignal, mem_br_cSignal, mem_lc_cSignal, 
+                       mem_mh_cSignal, mem_oc_cSignal, mem_coad_cSignal,
+                       mem_me_sPCA, mem_mh_sPCA)
+# information from SpaGCN and STAGATE runs
+res_me_spagcn <- readRDS("./data_outputs/benchmarkOut/res_me_spagcn.Rds")$raw[[2]]
+res_me_stagate <- readRDS("./data_outputs/benchmarkOut/res_me_stagate.Rds")$raw[[2]]
+res_br_spagcn <- readRDS("./data_outputs/benchmarkOut/res_br_spagcn.Rds")$raw[[2]]
+res_br_stagate <- readRDS("./data_outputs/benchmarkOut/res_br_stagate.Rds")$raw[[2]]
+res_lc_spagcn <- readRDS("./data_outputs/benchmarkOut/res_lc_spagcn.Rds")$raw[[2]]
+res_lc_stagate <- readRDS("./data_outputs/benchmarkOut/res_lc_stagate.Rds")$raw[[2]]
+res_mh_spagcn <- readRDS("./data_outputs/benchmarkOut/res_mh_spagcn.Rds")$raw[[2]]
+res_mh_stagate <- readRDS("./data_outputs/benchmarkOut/res_mh_stagate.Rds")$raw[[2]]
+res_oc_stagate <- readRDS("./data_outputs/benchmarkOut/res_oc_stagate.Rds")$raw[[2]]
+res_coad_stagate <- readRDS("./data_outputs/benchmarkOut/res_coad_stagate.Rds")$raw[[2]]
+# information from GraphST runs
+mem_me_graphst <- read.csv("./data_outputs/benchmarkOut/mem_me_graphst.csv")
 
-# all combinations of dataset and methods that worked
-data_comb <- paste(all_resources$Dataset, all_resources$Method, sep = "_")
-# calculating average ARI per dataset and method combination
-all_resources$avg_ari <- lapply(data_comb, function(x) {
-  dataset <- str_split_i(x, pattern = "_", i = 1)
-  method <- str_split_i(x, pattern = "_", i = 2)
-  columnName <- colnames(metrics)[startsWith(colnames(metrics), method)]
-  metrics[metrics$Dataset == dataset, columnName] |> mean()
-}) |> unlist()
+# combining all resources used
+all_resources <- all_resources %>%
+  select(Dataset, Method, Elapsed_Time_sec, Peak_RAM_Used_MiB) %>%
+  mutate(Method = recode(Method, "Banksy" = "BANKSY")) %>%
+  # adding other method outputs
+  rbind(
+    c("ME", "SpaGCN", (res_me_spagcn$toc - res_me_spagcn$tic), res_me_spagcn$mem),
+    c("ME", "STAGATE", (res_me_stagate$toc - res_me_stagate$tic), res_me_stagate$mem),
+    c("BR", "SpaGCN", (res_br_spagcn$toc - res_br_spagcn$tic), res_br_spagcn$mem),
+    c("BR", "STAGATE", (res_br_stagate$toc - res_br_stagate$tic), res_br_stagate$mem),
+    c("LC", "SpaGCN", (res_lc_spagcn$toc - res_lc_spagcn$tic), res_lc_spagcn$mem),
+    c("LC", "STAGATE", (res_lc_stagate$toc - res_lc_stagate$tic), res_lc_stagate$mem),
+    c("MH", "SpaGCN", (res_mh_spagcn$toc - res_mh_spagcn$tic), res_mh_spagcn$mem),
+    c("MH", "STAGATE", (res_mh_stagate$toc - res_mh_stagate$tic), res_mh_stagate$mem),
+    c("OC", "STAGATE", (res_oc_stagate$toc - res_oc_stagate$tic), res_oc_stagate$mem),
+    c("COAD", "STAGATE", (res_coad_stagate$toc - res_coad_stagate$tic),
+      res_coad_stagate$mem),
+    c("ME", "GraphST", mem_me_graphst$runtime_sec, mem_me_graphst$peak_memory_MB),
+    c("COAD", "BASS", NA, NA),
+    c("BR", "SpatialPCA", NA, NA),
+    c("LC", "SpatialPCA", NA, NA),
+    c("OC", "SpatialPCA", NA, NA),
+    c("COAD", "SpatialPCA", NA, NA),
+    c("OC", "SpaGCN", NA, NA),
+    c("COAD", "SpaGCN", NA, NA),
+    c("BR", "GraphST", NA, NA),
+    c("LC", "GraphST", NA, NA),
+    c("MH", "GraphST", NA, NA),
+    c("OC", "GraphST", NA, NA),
+    c("COAD", "GraphST", NA, NA)) %>%
+  # adding other relevant information
+  mutate(Cells = recode(Dataset, "ME" = 52568, "BR" = 274501, "OC" = 284984, 
+                        "COAD" = 520382, "LC" = 771236, "MH" = 874756),
+         MeanSampleSize = recode(Dataset, "ME" = 17522.67, "BR" = 137250.5, 
+                                 "OC" = 284984, "COAD" = 520382, "LC" = 96404.5, 
+                                 "MH" = 4832.906),
+         CellNum = recode(Dataset, "ME" = "53k", "BR" = "275k", "OC" = "290k", 
+                          "COAD" = "520k", "LC" = "771k", "MH" = "875k"),
+         Method = factor(Method, levels = c("ClustSIGNAL", "BANKSY", "BASS",
+                                            "SpatialPCA", "SpaGCN", "STAGATE",
+                                            "GraphST"))) %>%
+  arrange(Dataset, Method)
+saveRDS(all_resources, "./data_outputs/benchmarkOut/resources_revised.Rds")
+```
 
-# adding column for number of cells in a dataset
-all_resources$Cells <- vapply(data_comb, function(x) {
-  dataset <- str_split_i(x, pattern = "_", i = 1)
-  table(clustDF$Dataset)[dataset]
-}, FUN.VALUE = integer(1))
-# adding column of characters representing number of cells in a dataset
-all_resources$CellNum <- paste0(round(all_resources$Cells / 1000), "k") |> 
-  factor(levels = c("53k", "275k", "771k", "875k"))
 
-saveRDS(all_resources, "./data_outputs/benchmarkOut/compute_metrics.Rds")
+
+
+# Benchmarking multisample analysis
+
+```{r}
+
+
 ```
