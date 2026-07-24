@@ -1,4 +1,29 @@
 #### wrapper functions for method packages ####
+runClustSIGNAL <- function(spe, samples, threads = 1, outputs = "a", hvgs = F,
+                           batch = F) {
+    
+    if (hvgs == T & batch == T) {
+        gene_var <- scran::modelGeneVar(spe, block = batch_by)
+        hvg_genes <- scran::getTopHVGs(gene_var, n = 3000)
+        spe <- spe[hvg_genes, ]
+        spe <- scater::logNormCounts(spe)
+        show(paste("Highly variable genes selected consdering batch effects. Time", 
+                   format(Sys.time(),'%H:%M:%S')))
+    } else if (hvgs == T & batch == F) {
+        gene_var <- scran::modelGeneVar(spe)
+        hvg_genes <- scran::getTopHVGs(gene_var, n = 3000)
+        spe <- spe[hvg_genes, ]
+        spe <- scater::logNormCounts(spe)
+        show(paste("Highly variable genes selected. Time", 
+                   format(Sys.time(),'%H:%M:%S')))
+    }
+    
+    res <- clustSIGNAL(spe, samples = "sample_id", threads = 1, outputs = "a")
+    return(res)
+}
+
+
+
 runBANKSY <- function(spe, annots_label, sample_label, SEED, k_geom = c(15, 30), 
                       batch = FALSE, batch_by = "None", lambda = 0.2, res = 1, 
                       npcs = 20, use_agf = TRUE, compute_agf = TRUE){
@@ -201,6 +226,39 @@ runSpatialPCA <- function(spe, samples, sparkv = 'sparkx', ncores = 1) {
 }
 
 
+create_annFiles <- function(spe, sample_label, fileSavepath, keep_cols) {
+    
+    # Parameters
+    #   spe = spe object containing gene expressions of cells from all samples
+    #   sample_label = name of colData(spe) column with sample names
+    #   fileSavepath = path where anndata files should be saved
+    #   keep_cols = names of colData(spe) columns to keep
+    
+    # generating h5ad file for each sample
+    samples = unique(spe[[sample_label]])
+    for (i in samples) {
+        speX <- spe[, spe[[sample_label]] == i]
+        sample <- paste0("Sample_", i)
+        spCoords <- as.data.frame(spatialCoords(speX))
+        rownames(spCoords) = NULL
+        colnames(spCoords) = NULL
+        
+        cdata <- as.data.frame(colData(speX)[, keep_cols])
+        
+        # X is a matrix
+        # obs is a data frame
+        # obsm and layers are lists of matrices
+        ad <- AnnData(
+            X = t(counts(speX)),
+            obs = cdata,
+            obsm = list(
+                spatial = as.matrix(spCoords)))
+        write_h5ad(ad, paste0(fileSavepath, sample, ".h5ad"))
+        print(paste0(sample, " saved"))
+    }
+}
+
+
 #### Python method wrappers via reticulate ####
 
 .resolveSampleLabel <- function(sample_label = NULL, samples = NULL) {
@@ -369,42 +427,6 @@ runSpatialPCA <- function(spe, samples, sparkv = 'sparkx', ncores = 1) {
     )
     class(out) <- c("benchmarkPythonResult", class(out))
     return(out)
-}
-
-
-runGraphST <- function(spe, sample_label = NULL, samples = NULL, n_clusters, SEED,
-                       assay_name = "counts", cluster_method = "mclust",
-                       refinement = TRUE, radius = 50, datatype = "Slide",
-                       epochs = 600, device = "cpu", start = 0.1, end = 3.0,
-                       increment = 0.01, py_file = NULL, python_path = NULL) {
-    
-    sample_label <- .resolveSampleLabel(sample_label, samples)
-    inputs <- .preparePythonBenchmarkInputs(spe, sample_label, assay_name)
-    n_clusters <- .expandBySample(n_clusters, inputs$sample_names, "n_clusters")
-    datatype <- .expandBySample(datatype, inputs$sample_names, "datatype")
-    py_mod <- .getBenchmarkPythonModule(py_file, python_path)
-    
-    show(paste("GraphST run started. Time", format(Sys.time(), '%H:%M:%S')))
-    py_res <- py_mod$run_graphst(
-        count_matrices = inputs$counts,
-        coord_matrices = inputs$coords,
-        barcodes = inputs$barcodes,
-        genes = inputs$genes,
-        sample_ids = inputs$sample_names,
-        n_clusters = n_clusters,
-        seed = as.integer(SEED),
-        device = device,
-        cluster_method = cluster_method,
-        refinement = refinement,
-        radius = as.integer(radius),
-        datatype = datatype,
-        epochs = as.integer(epochs),
-        start = start,
-        end = end,
-        increment = increment
-    )
-    show(paste("GraphST clustering completed. Time", format(Sys.time(), '%H:%M:%S')))
-    .formatPythonBenchmarkResult(py_res, colnames(spe))
 }
 
 
