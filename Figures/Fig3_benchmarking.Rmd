@@ -16,11 +16,13 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(reshape2)
 library(dplyr)
+library(tidyr)
 library(stringr)
 
 library(ggplot2)
 library(scattermore)
 library(patchwork)
+library(scales)
 ```
 
 ```{r}
@@ -36,64 +38,80 @@ colors <- setNames(c("#635547", "#8EC792", "#9e6762", "#FACB12", "#3F84AA",
                      "#B51D8D", "#532C8A", "#8870ad", "#cc7818", "#FBBE92", 
                      "#EF4E22", "#f9decf", "#c9a997", "#C9EBFB", "#f79083", 
                      "#F397C0", "#DABE99", "#c19f70", "#354E23", "#C3C388",
+                     "#A10037", 
+                     "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", 
+                     "#E6AB02", "#A6761D", "#666666", "#17BECF", "#BCBD22",  
+                     "#9467BD", "#8C564B", "#7F7F7F", "#AEC7E8", "#FF1493", 
+                     "#00A6D6", "#7FC97F", "#BEAED4", "#FD8D3C", "#B15928", 
+                     "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", 
+                     "#A6CEE3", "#B2DF8A", "#FB9A99", "#F781BF", "#6A3D9A", 
                      "grey95", "white"), 
-                   c(1:30, "Unlabelled", "NA"))
+                   c(1:30, 0, 31:60, "Unlabelled", NA))
 
-methodColors <- setNames(c("#0F4A9C", "#3dd3b9", "#ff891c", "#E1C239"),
-                         c("ClustSIGNAL", "BANKSY", "BASS", "SpatialPCA"))
+methodColors <- setNames(c("#0F4A9C", "#3dd3b9", "#ff891c", "#E1C239", 
+                           "#D81B60", "#7B1FA2", "#2E7D32"),
+                         c("ClustSIGNAL", "BANKSY", "BASS", "SpatialPCA", 
+                           "STAGATE", "SpaGCN", "GraphST"))
+methodColors <- setNames(c("#173b66", "#3dd3b9", "#ff891c", "#E1C239", 
+                           "#D81B60", "#7B1FA2", "#2E7D32"),
+                         c("ClustSIGNAL", "BANKSY", "BASS", "SpatialPCA", 
+                           "STAGATE", "SpaGCN", "GraphST"))
+
 ```
 
-# Panels a-d - spatial plots
+# Panels a-f - spatial plots
 
 ```{r}
-# Dataset and samples:
-#   mouse embryo - embryo2
-#   breast cancer - Rep1
-#   lung cancer - Lung9_Rep1
-#   mouse hypothalamus - Animal 7 Bregma -0.19
-
-# list of samples taken from 4 real-world datasets
-samples <- c("embryo2", "Xenium_FFPE_Human_Breast_Cancer_Rep1_outs", 
-             "Lung9_Rep1", "7.-0.19")
-
 # reading clustering outcome from benchmarking
-clustDF <- readRDS("./data_outputs/benchmarkOut/BenchDF.Rds")
+clustDF_me <- readRDS("./data_outputs/benchmarkOut/BenchDF_me_update.Rds")
+clustDF_br <- readRDS("./data_outputs/benchmarkOut/BenchDF_br_update.Rds")
+clustDF_lc <- readRDS("./data_outputs/benchmarkOut/BenchDF_lc_update.Rds")
+clustDF_mh <- readRDS("./data_outputs/benchmarkOut/BenchDF_mh_update.Rds")
+clustDF_oc <- readRDS("./data_outputs/benchmarkOut/BenchDF_oc.Rds")
+clustDF_coad <- readRDS("./data_outputs/benchmarkOut/BenchDF_coad.Rds")
 
 # sub-setting data from selected samples
-clustDF_sub <- clustDF[clustDF$Sample %in% samples, ]
-colnames(clustDF_sub) <- c("Cells", "Sample", "x", "y", "Celltype", "BASS", "BANKSY",
-                       "SpatialPCA", "ClustSIGNAL")
+clustDF_sub <- rbind(
+  clustDF_me[clustDF_me$Sample == "embryo2", ],
+  clustDF_br[clustDF_br$Sample == "Xenium_FFPE_Human_Breast_Cancer_Rep2_outs", ],
+  clustDF_lc[clustDF_lc$Sample == "Lung6", ],
+  clustDF_mh[clustDF_mh$Sample == "7.-0.29", ],
+  clustDF_oc,
+  clustDF_coad)
 
 # converting data frame into long format
-clustDF_melt <- reshape2::melt(clustDF_sub, id.vars = c("Cells", "Sample", "x", "y"))
-clustDF_melt$variable <- factor(clustDF_melt$variable, 
-                                levels = c("Celltype", "ClustSIGNAL", "BANKSY", 
-                                           "BASS", "SpatialPCA"))
-clustDF_melt$sample_comb <- paste0(clustDF_melt$Sample, "_", clustDF_melt$variable)
-clustDF_melt <- arrange(clustDF_melt, Sample)
+clustDF_melt <- 
+  reshape2::melt(clustDF_sub, 
+                 id.vars = c("Dataset", "Cells", "Sample", "x", "y")) %>%
+  mutate(sample_comb = paste(Sample, variable, sep = "_"),
+         dataset_comb = paste(Sample, Dataset, sep = "_")) %>%
+  arrange(Dataset)
+
+datset_samples <- c("embryo2_ME", "7.-0.29_MH", "Lung6_LC", 
+                    "Xenium_FFPE_Human_Breast_Cancer_Rep2_outs_BR",
+                    "sample01_OC", "sample01_COAD")
 
 # reading clustering performance metrics from benchmarking
-metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics.Rds")
+metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics_update.Rds") %>%
+  mutate(dataset_comb = paste(Sample, Dataset, sep = "_"))
 
-# sub-setting metrics data from selected samples
-sub_metrics <- metrics[metrics$Sample %in% samples, c(1:6)]
-colnames(sub_metrics) <- c("Dataset", "Sample", "BASS", "BANKSY", "SpatialPCA",
-                           "ClustSIGNAL")
-sub_metrics <- reshape2::melt(sub_metrics)
+# # sub-setting metrics data from selected samples
+# sub_metrics <- metrics[metrics$Sample %in% samples, c(1:6)]
+# colnames(sub_metrics) <- c("Dataset", "Sample", "BASS", "BANKSY", "SpatialPCA",
+#                            "ClustSIGNAL")
+# sub_metrics <- reshape2::melt(sub_metrics)
 
 # setting points sizes for each dataset
-sampSize <- setNames(c(2.5, 1.5, 2, 3), samples)
+sampSize <- setNames(c(2.5, 3.5, 2, 1.5, 1, 1), datset_samples)
 
 spatialPlots_list <- setNames(
-  lapply(samples, function(x) {
-    subDF_annot <- clustDF_melt[clustDF_melt$Sample == x & 
+  lapply(datset_samples, function(x) {
+    subDF_annot <- clustDF_melt[clustDF_melt$dataset_comb == x & 
                                   clustDF_melt$variable == "Celltype", ]
     plt_annot <- subDF_annot %>%
       ggplot(aes(x = x, y = -y, color = value)) +
       geom_scattermore(pointsize = sampSize[x]) +
-      facet_wrap(vars(variable)) +
       scale_color_manual(values = colors_annots) +
-      guides(colour = guide_legend(override.aes = list(size = 5))) +
       theme_classic() +
       theme(axis.text = element_blank(),
             axis.title = element_blank(),
@@ -103,118 +121,159 @@ spatialPlots_list <- setNames(
             strip.text = element_text(size = 14),
             legend.position = "None")
     
-    subDF_clust <- clustDF_melt[clustDF_melt$Sample == x & 
-                                  clustDF_melt$variable != "Celltype", ]
-    sub_sub_metrics <- sub_metrics[sub_metrics$Sample == x, ]
+    subDF_clust <- clustDF_melt[clustDF_melt$dataset_comb == x & 
+                                  clustDF_melt$variable != "Celltype", ] %>%
+      mutate(variable = factor(variable, 
+                               levels = c("ClustSIGNAL", "BANKSY", "BASS",
+                                          "SpatialPCA", "SpaGCN", "STAGATE", 
+                                          "GraphST")))
+    sub_metrics <- metrics[metrics$dataset_comb == x, ] %>%
+      select(Dataset, Sample, dataset_comb, ends_with("_ari")) %>%
+      pivot_longer(cols = ends_with("_ari"), names_to = "Methods", 
+                   values_to = "ARI") %>%
+      mutate(Methods = sub("_ari", "", Methods))
+    
     fig_labels <- setNames(
-      paste(sub_sub_metrics$variable, " ARI:", round(sub_sub_metrics$value, 2)),
-      sub_sub_metrics$variable)
+      paste(sub_metrics$Methods, " ARI:", round(sub_metrics$ARI, 2)),
+      sub_metrics$Methods)
     plt_clust <- subDF_clust %>%
       ggplot(aes(x = x, y = -y, color = value)) +
       geom_scattermore(pointsize = sampSize[x]) +
       facet_wrap(vars(variable), nrow = 1, 
                  labeller = labeller(variable = fig_labels)) +
-      scale_color_manual(values = colors) +
-      guides(colour = guide_legend(override.aes = list(size = 5))) +
+      scale_color_manual(values = colors, na.value = "white") +
       theme_classic() +
       theme(axis.text = element_blank(),
             axis.title = element_blank(),
             axis.ticks = element_blank(),
             axis.line = element_blank(),
             strip.background = element_blank(),
-            strip.text = element_text(size = 14),
+            strip.text = element_text(size = 12),
             legend.position = "None")
     plt <- plt_annot + plt_clust + plot_layout(axes = "collect", 
-                                               widths = c(1, 4))
+                                               widths = c(1, 7))
     return(plt)
-  }), samples)
+  }), datset_samples)
 
 # combining the spatial plots
-sp_plots_comb <- wrap_plots(spatialPlots_list, nrow = 4) + 
-  plot_layout(axes = "collect", guides = "collect", heights = c(5, 4, 4, 4))
+sp_plots_comb <- wrap_plots(spatialPlots_list, nrow = 6) + 
+  plot_layout(axes = "collect", guides = "collect", heights = c(5, 4, 4, 4, 5, 4))
+ggsave("./data_outputs/visuals/Fig.3_bench.pdf", plot = sp_plots_comb, 
+       width = 15, height = 10, units = "in")
 ```
 
-# Panels e-g - performance metrics plots
+# Panels g-i - performance metrics plots
 
 ```{r}
 # Datasets: mouse embryo (ME), breast cancer (BR), lung cancer (LC),
-#   mouse hypothalamus (MH)
+#   mouse hypothalamus (MH), ovarian cancer (OC), colon cancer (COAD)
 # Metrics - ARI, runtime, memory usage
 
-# reading clustering performance metrics from benchmarking
-clust_metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics.Rds")
+#### reading clustering performance metrics from benchmarking
+clust_metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics_update.Rds")
 
 # sub-setting ari columns
-ari_metrics <- clust_metrics[, c(1:6)]
-colnames(ari_metrics) <- c("Dataset", "Sample", "BASS", "BANKSY", "SpatialPCA",
-                           "ClustSIGNAL")
+ari_metrics <- clust_metrics %>%
+  select(Dataset, Sample, ends_with("_ari"))
+colnames(ari_metrics) <- sub("_ari$", "", colnames(ari_metrics))
 
-# converting data frame into long format
-metrics_melt <- reshape2::melt(ari_metrics) %>%
-  mutate(variable = factor(variable, levels = c("ClustSIGNAL", "BANKSY", "BASS", 
-                                                "SpatialPCA")))
-metrics_melt$Dataset <- factor(metrics_melt$Dataset, 
-                               levels = c("ME", "BR", "LC", "MH"))
 
-ari_plot <- metrics_melt %>%
-  ggplot(aes(x = Dataset, y = value, group = interaction(Dataset, variable), 
-             colour = variable, fill = variable)) +
+ari_plot <- ari_metrics %>%
+  pivot_longer(cols = -c(Dataset, Sample), names_to = "Methods", 
+               values_to ="ARI") %>%
+  mutate(Methods = factor(Methods, 
+                          levels = c("ClustSIGNAL", "BANKSY", "STAGATE", 
+                                     "BASS", "SpaGCN", "SpatialPCA", 
+                                     "GraphST")),
+         Dataset = factor(Dataset, levels = c("ME", "BR", "OC", "COAD", 
+                                              "LC", "MH"))) %>%
+  ggplot(aes(x = Dataset, y = ARI, group = interaction(Dataset, Methods), 
+             colour = Methods, fill = Methods)) +
   geom_boxplot(alpha = 0.8) +
-  geom_jitter(position = position_jitterdodge(jitter.width = 0.2, 
-                                              dodge.width = 0.75), 
-              size = 0.5, alpha = 0.5) +
   labs(x = "Dataset", y = "ARI") +
-  ylim(0, 0.8) +
+  # ylim(0, 0.85) +
+  scale_y_continuous(limits = c(0, 0.85), breaks = seq(0, 1, by = 0.1)) +
   scale_color_manual(values = methodColors) +
   scale_fill_manual(values = methodColors) +
   theme_classic() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14),
+        legend.text = element_blank(),
+        legend.title = element_blank(),
         legend.position = "none")
-```
 
-```{r}
-# reading computational performance outcomes from benchmarking
-compute_metrics <- readRDS("./data_outputs/benchmarkOut/compute_metrics.Rds")
+
+#### reading computational performance outcomes from benchmarking
+compute_metrics <- readRDS("./data_outputs/benchmarkOut/resources_revised.Rds")
 compute_metrics$Dataset <- factor(compute_metrics$Dataset, 
-                                  levels = c("ME", "BR", "LC", "MH"))
+                                  levels = c("ME", "BR", "OC", "COAD", "LC", "MH"))
+compute_metrics$Elapsed_Time_hr <- 
+  as.numeric(compute_metrics$Elapsed_Time_sec) / 3600
+compute_metrics$Peak_RAM_Used_GB <- 
+  as.numeric(compute_metrics$Peak_RAM_Used_MiB) / 1024
 
-# runtime plot
+# run time plot
+# runtime_plot <- compute_metrics %>%
+#   ggplot(aes(x = Dataset, y = Elapsed_Time_hr, group = Method, 
+#              fill = Method)) +
+#   geom_col(position = "dodge") +
+#   geom_text(aes(label = round(Elapsed_Time_hr)), 
+#             position = position_dodge(width = 0.9), vjust = -0.25, size = 3.5) +
+#   labs(x = "Dataset", y = "Run time (hr)") +
+#   scale_fill_manual(values = methodColors) +
+#   theme_classic() +
+#   theme(axis.text = element_text(size = 12),
+#         axis.title = element_text(size = 14),
+#         legend.text = element_text(size = 12),
+#         legend.title = element_blank())
 runtime_plot <- compute_metrics %>%
-  ggplot(aes(x = Dataset, y = Elapsed_Time_sec/3600, group = Method, 
-             fill = Method)) +
-  geom_col(position = "dodge") +
-  geom_text(aes(label = round(Elapsed_Time_sec/3600)), 
-            position = position_dodge(width = 0.9), vjust = -0.25, size = 3.5) +
+  ggplot(aes(x = Dataset, y = Elapsed_Time_hr, group = Method)) +
+  geom_line(aes(color = Method), linewidth = 1) +
+  geom_point(aes(color = Method, size = MeanSampleSize), alpha = 0.7) +
   labs(x = "Dataset", y = "Run time (hr)") +
-  scale_fill_manual(values = methodColors) +
+  scale_color_manual(values = methodColors) +
+  scale_size_continuous(name = "Mean sample\nsize", range = c(1, 8), 
+                        labels = label_comma()) +
   theme_classic() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
         legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
+        legend.title = element_blank())
 
 # memory usage plot
+# memUsage_plot <- compute_metrics %>%
+#   ggplot(aes(x = Dataset, y = Peak_RAM_Used_GB, group = Method, 
+#              fill = Method)) +
+#   geom_col(position = "dodge") +
+#   geom_text(aes(label = round(Peak_RAM_Used_GB)), 
+#             position = position_dodge(width = 0.9), vjust = -0.25, size = 3.5) +
+#   labs(x = "Dataset", y = "Memory usage (GB)") +
+#   scale_fill_manual(values = methodColors) +
+#   theme_classic() +
+#   theme(axis.text = element_text(size = 12),
+#         axis.title = element_text(size = 14),
+#         legend.text = element_text(size = 12),
+#         legend.title = element_blank())
 memUsage_plot <- compute_metrics %>%
-  ggplot(aes(x = Dataset, y = Peak_RAM_Used_MiB/1000, group = Method, 
-             fill = Method)) +
-  geom_col(position = "dodge") +
-  geom_text(aes(label = round(Peak_RAM_Used_MiB/1000)), 
-            position = position_dodge(width = 0.9), vjust = -0.25, size = 3.5) +
-  labs(x = "Dataset", y = "Memory usage (Gb)") +
-  scale_fill_manual(values = methodColors) +
+  ggplot(aes(x = Dataset, y = Peak_RAM_Used_GB, group = Method)) +
+  geom_line(aes(color = Method), linewidth = 1) +
+  geom_point(aes(color = Method, size = MeanSampleSize), alpha = 0.7) +
+  labs(x = "Dataset", y = "Memory usage (GB)") +
+  scale_color_manual(values = methodColors) +
+  scale_size_continuous(name = "Mean sample\nsize", range = c(1, 8), 
+                        labels = label_comma()) +
   theme_classic() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
         legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-```
+        legend.title = element_blank())
 
-```{r}
 # combining all metrics plots
-comb_resource_plot <- ari_plot + runtime_plot + memUsage_plot +
-  plot_layout(guides = "collect", ncol = 3, widths = c(1.5, 1, 1)) &
+comb_resource_plot <- ari_plot + (runtime_plot / memUsage_plot) +
+  plot_layout(guides = "collect", ncol = 2, widths = c(1.4, 1)) &
   theme(legend.position = "bottom")
+# ggsave("./data_outputs/visuals/Bench_all_resources_bars_ed.pdf",
+#        plot = comb_resource_plot, width = 15, height = 6, units = "in")
+ggsave("./data_outputs/visuals/Bench_all_resources_lines.pdf",
+       plot = comb_resource_plot, width = 15, height = 6, units = "in")
 ```
