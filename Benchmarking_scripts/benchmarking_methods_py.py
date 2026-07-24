@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import inspect
 import random
 from collections.abc import Mapping, Sequence
@@ -10,6 +11,8 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+import time
+from memory_profiler import memory_usage
 
 def _is_sequence(value):
     return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
@@ -173,102 +176,6 @@ def _accepts_arg(func, arg_name):
         return False
 
 
-def _init_graphst():
-    graphst_root = importlib.import_module("GraphST")
-    graphst_obj = getattr(graphst_root, "GraphST", None)
-    if graphst_obj is not None and hasattr(graphst_obj, "GraphST"):
-        graphst_ctor = graphst_obj.GraphST
-    elif callable(graphst_obj):
-        graphst_ctor = graphst_obj
-    else:
-        graphst_ctor = importlib.import_module("GraphST.GraphST").GraphST
-    clustering_fn = importlib.import_module("GraphST.utils").clustering
-    return graphst_ctor, clustering_fn
-
-
-def run_graphst(
-    count_matrices,
-    coord_matrices,
-    barcodes,
-    genes,
-    sample_ids=None,
-    n_clusters=None,
-    seed=567,
-    device="cpu",
-    cluster_method="mclust",
-    refinement=True,
-    radius=50,
-    datatype="Slide",
-    epochs=600,
-    start=0.1,
-    end=3.0,
-    increment=0.01,
-):
-    sample_ids = _as_sample_ids(sample_ids, len(count_matrices))
-    _ensure_sparse_array_property()
-    n_clusters = _expand_sample_arg(n_clusters, sample_ids, "n_clusters")
-    datatype = _expand_sample_arg(datatype, sample_ids, "datatype")
-
-    graphst_ctor, clustering_fn = _init_graphst()
-    torch_device = _resolve_device(device)
-
-    results = {
-        "method": "GraphST",
-        "sample_ids": sample_ids,
-        "barcodes": {},
-        "clusters": {},
-        "cluster_columns": {},
-        "embeddings": {},
-        "params": {
-            "seed": int(seed),
-            "cluster_method": str(cluster_method),
-            "refinement": bool(refinement),
-            "radius": int(radius),
-            "epochs": int(epochs),
-        },
-    }
-
-    for sid, counts, coords, cells, n_clust, data_type in zip(
-        sample_ids, count_matrices, coord_matrices, barcodes, n_clusters, datatype
-    ):
-        _seed_all(seed)
-        adata = _build_adata(counts, coords, cells, genes, sid)
-
-        model = graphst_ctor(
-            adata,
-            device=torch_device,
-            epochs=int(epochs),
-            random_seed=int(seed),
-            datatype=str(data_type),
-        )
-        adata = model.train()
-        clustering_fn(
-            adata,
-            int(n_clust),
-            radius=int(radius),
-            method=str(cluster_method),
-            start=float(start),
-            end=float(end),
-            increment=float(increment),
-            refinement=bool(refinement),
-        )
-
-        results["barcodes"][sid] = [str(x) for x in adata.obs_names.tolist()]
-        results["clusters"][sid] = _obs_values(adata, "domain")
-        results["cluster_columns"][sid] = {
-            "domain": _obs_values(adata, "domain"),
-        }
-        if "mclust" in adata.obs:
-            results["cluster_columns"][sid]["mclust"] = _obs_values(adata, "mclust")
-        if "leiden" in adata.obs:
-            results["cluster_columns"][sid]["leiden"] = _obs_values(adata, "leiden")
-        if "louvain" in adata.obs:
-            results["cluster_columns"][sid]["louvain"] = _obs_values(adata, "louvain")
-        results["embeddings"][sid] = _as_nested_lists(_embedding_values(adata, "emb"))
-
-    return results
-
-
 def run_spagcn(
     count_matrices,
     coord_matrices,
@@ -341,14 +248,24 @@ def run_spagcn(
         res,
         refine_shape,
     ):
+        print(sid)
         adata = _build_adata(counts, coords, cells, genes, sid)
         img = _load_image(image)
         histology_flag = bool(use_histology) and img is not None
+        
+        spg.prefilter_genes(adata, min_cells=int(min_cells))
+        spg.prefilter_specialgenes(adata)
+        if hasattr(sc.pp, "normalize_per_cell"):
+            sc.pp.normalize_per_cell(adata)
+        else:
+            sc.pp.normalize_total(adata, target_sum=1e4)
+        sc.pp.log1p(adata)
 
         x_pixel = adata.obsm["spatial"][:, 0].tolist()
         y_pixel = adata.obsm["spatial"][:, 1].tolist()
         x_array = adata.obs["x_array"].tolist()
         y_array = adata.obs["y_array"].tolist()
+        
 
         adj = spg.calculate_adj_matrix(
             x=x_pixel,
@@ -360,14 +277,6 @@ def run_spagcn(
             alpha=float(alpha),
             histology=histology_flag,
         )
-
-        spg.prefilter_genes(adata, min_cells=int(min_cells))
-        spg.prefilter_specialgenes(adata)
-        if hasattr(sc.pp, "normalize_per_cell"):
-            sc.pp.normalize_per_cell(adata)
-        else:
-            sc.pp.normalize_total(adata, target_sum=1e4)
-        sc.pp.log1p(adata)
 
         if l_cur is None:
             l_cur = spg.search_l(
@@ -441,7 +350,7 @@ def run_stagate(
     n_clusters=None,
     seed=567,
     device="cpu",
-    rad_cutoff=150,
+    k_cutoff=30,
     cluster_method="mclust",
     n_top_genes=3000,
     resolution=1.0,
@@ -451,11 +360,12 @@ def run_stagate(
 ):
     sc = importlib.import_module("scanpy")
     stagate = importlib.import_module("STAGATE_pyG")
+    # stagate = importlib.import_module("STAGATE")
     _ensure_sparse_array_property()
 
     sample_ids = _as_sample_ids(sample_ids, len(count_matrices))
     n_clusters = _expand_sample_arg(n_clusters, sample_ids, "n_clusters")
-    rad_cutoff = _expand_sample_arg(rad_cutoff, sample_ids, "rad_cutoff")
+    k_cutoff = _expand_sample_arg(k_cutoff, sample_ids, "k_cutoff")
 
     results = {
         "method": "STAGATE",
@@ -476,7 +386,7 @@ def run_stagate(
     torch_device = _resolve_device(device)
 
     for sid, counts, coords, cells, n_clust, cutoff in zip(
-        sample_ids, count_matrices, coord_matrices, barcodes, n_clusters, rad_cutoff
+        sample_ids, count_matrices, coord_matrices, barcodes, n_clusters, k_cutoff
     ):
         adata = _build_adata(counts, coords, cells, genes, sid)
 
@@ -488,7 +398,7 @@ def run_stagate(
         sc.pp.normalize_total(adata, target_sum=float(target_sum))
         sc.pp.log1p(adata)
 
-        stagate.Cal_Spatial_Net(adata, rad_cutoff=float(cutoff))
+        stagate.Cal_Spatial_Net(adata, model = "KNN", k_cutoff=int(cutoff))
         if hasattr(stagate, "Stats_Spatial_Net"):
             stagate.Stats_Spatial_Net(adata)
 
@@ -536,3 +446,60 @@ def run_stagate(
         )
 
     return results
+
+
+def spagcn_mem_wrapper(
+    count_matrices, coord_matrices, barcodes, genes,
+    sample_ids=None, n_clusters=None, seed=567, images=None,
+    use_histology=False, refine=False, refine_shape="square",
+    alpha=1.0, beta=49.0, p=0.5, l_value=None, res=None,
+    init_spa=True, init="louvain", tol=5e-3, lr=0.05,
+    max_epochs=200, search_res_start=0.7, search_res_step=0.1,
+    search_res_tol=5e-3, search_res_epochs=20, l_search_start=0.01,
+    l_search_end=1000, l_search_tol=0.01, l_search_max_run=100, min_cells=3
+):
+    start_time = time.time()
+    
+    args = (count_matrices, coord_matrices, barcodes, genes)
+    kwargs = {
+        "sample_ids": sample_ids, "n_clusters": n_clusters, "seed": seed, "images": images,
+        "use_histology": use_histology, "refine": refine, "refine_shape": refine_shape,
+        "alpha": alpha, "beta": beta, "p": p, "l_value": l_value, "res": res,
+        "init_spa": init_spa, "init": init, "tol": tol, "lr": lr, "max_epochs": max_epochs,
+        "search_res_start": search_res_start, "search_res_step": search_res_step,
+        "search_res_tol": search_res_tol, "search_res_epochs": search_res_epochs,
+        "l_search_start": l_search_start, "l_search_end": l_search_end,
+        "l_search_tol": l_search_tol, "l_search_max_run": l_search_max_run, "min_cells": min_cells
+    }
+    
+    mem_usage, results = memory_usage((run_spagcn, args, kwargs), retval=True, max_usage=True)
+    end_time = time.time()
+
+    print(f"Maximum memory usage: {mem_usage} MiB")
+    print(f"Total running time: {end_time - start_time} seconds")
+    
+    return [results, {"mem": float(mem_usage), "tic": start_time, "toc": end_time}]
+
+
+def stagate_mem_wrapper(
+    count_matrices, coord_matrices, barcodes, genes,
+    sample_ids=None, n_clusters=None, seed=567, device="cpu",
+    k_cutoff=30, cluster_method="mclust", n_top_genes=3000,
+    resolution=1.0, use_rep="STAGATE", target_sum=1e4, n_epochs=None
+):
+    start_time = time.time()
+    
+    args = (count_matrices, coord_matrices, barcodes, genes)
+    kwargs = {
+        "sample_ids": sample_ids, "n_clusters": n_clusters, "seed": seed, "device": device,
+        "k_cutoff": k_cutoff, "cluster_method": cluster_method, "n_top_genes": n_top_genes,
+        "resolution": resolution, "use_rep": use_rep, "target_sum": target_sum, "n_epochs": n_epochs
+    }
+    
+    mem_usage, results = memory_usage((run_stagate, args, kwargs), retval=True, max_usage=True)
+    end_time = time.time()
+
+    print(f"Maximum memory usage: {mem_usage} MiB")
+    print(f"Total running time: {end_time - start_time} seconds")
+    
+    return [results, {"mem": float(mem_usage), "tic": start_time, "toc": end_time}]
