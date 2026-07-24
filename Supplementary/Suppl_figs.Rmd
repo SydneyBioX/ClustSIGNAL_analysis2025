@@ -22,6 +22,7 @@ library(reshape2)
 library(scater)
 library(ggplot2)
 library(patchwork)
+library(scattermore)
 
 library(circlize)
 library(ComplexHeatmap)
@@ -30,6 +31,8 @@ library(org.Hs.eg.db)
 library(AnnotationDbi)
 library(clusterProfiler)
 ```
+
+
 
 # Suppl Fig. 1
 
@@ -148,39 +151,42 @@ panel_b <- ggplot(ari_summary2, aes(x = k_centroids, y = ClusterVar,
 
 ```
 
+
+
 # Suppl Figs. 2-13
 
 ```{r}
 # color panel
-colors <- setNames(c("#635547", "#8EC792", "#9e6762", "#FACB12", "#3F84AA", 
-                     "#0F4A9C", "#EF5A9D", "#C594BF", "#ff891c", "#DFCDE4", 
-                     "#139992", "#65A83E", "#005579", "#8DB5CE", "#C72228", 
+colors <- setNames(c("#8EC792", "#635547", "#EF5A9D", "#0F4A9C", "#3F84AA", 
+                     "#DFCDE4", "#ff891c", "#C594BF", "#65A83E", "#FACB12", 
+                     "#139992", "#9e6762", "#005579", "#8DB5CE", "#C72228", 
                      "#B51D8D", "#532C8A", "#8870ad", "#cc7818", "#FBBE92", 
                      "#EF4E22", "#f9decf", "#c9a997", "#C9EBFB", "#f79083", 
                      "#F397C0", "#DABE99", "#c19f70", "#354E23", "#C3C388",
+                     "#A10037", 
+                     "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", 
+                     "#E6AB02", "#A6761D", "#666666", "#17BECF", "#BCBD22",  
+                     "#9467BD", "#8C564B", "#7F7F7F", "#AEC7E8", "#FF1493", 
+                     "#00A6D6", "#7FC97F", "#BEAED4", "#FD8D3C", "#B15928", 
+                     "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", 
+                     "#A6CEE3", "#B2DF8A", "#FB9A99", "#F781BF", "#6A3D9A", 
                      "grey95", "white"), 
-                   c(1:30, "Unlabelled", "NA"))
-
+                   c(1:30, 0, 31:60, "Unlabelled", "NA"))
 
 # reading clustering performance metrics from benchmarking
-metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics.Rds")
-
+metrics <- readRDS("./data_outputs/benchmarkOut/clustering_metrics_update.Rds")
 
 # reading clustering outcome from benchmarking
-clustDF <- readRDS("./data_outputs/benchmarkOut/BenchDF.Rds")
-
-# mouse embryo dataset clusters
-clustDF_me <- clustDF[clustDF$Dataset == "ME", ]
-
-# breast cancer dataset clusters
-clustDF_br <- clustDF[clustDF$Dataset == "BR", ]
-
-# lung cancer dataset clusters
-clustDF_lc <- clustDF[clustDF$Dataset == "LC", ]
-
-# mouse hypothalamus dataset clusters
-clustDF_mh <- clustDF[clustDF$Dataset == "MH", ]
-
+clustDF_me <- readRDS("./data_outputs/benchmarkOut/BenchDF_me_update.Rds")
+clustDF_br <- readRDS("./data_outputs/benchmarkOut/BenchDF_br_update.Rds")
+clustDF_lc <- readRDS("./data_outputs/benchmarkOut/BenchDF_lc_update.Rds")
+clustDF_lc$Sample <- factor(clustDF_lc$Sample, 
+                            levels = c("Lung5_Rep1", "Lung5_Rep2", "Lung5_Rep3",
+                                       "Lung6", "Lung9_Rep1", "Lung9_Rep2",
+                                       "Lung12", "Lung13"))
+clustDF_mh <- readRDS("./data_outputs/benchmarkOut/BenchDF_mh_update.Rds")
+clustDF_oc <- readRDS("./data_outputs/benchmarkOut/BenchDF_oc.Rds")
+clustDF_coad <- readRDS("./data_outputs/benchmarkOut/BenchDF_coad.Rds")
 ```
 
 ```{r}
@@ -194,7 +200,7 @@ ari_label <- function(metrics, colName) {
 }
 ```
 
-## 2-5 ClustSIGNAL
+## 2-7 ClustSIGNAL
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -202,7 +208,9 @@ ari_label <- function(metrics, colName) {
 me_cSIGNAL <- ggplot(clustDF_me, aes(x = x, y = -y, color = ClustSIGNAL)) +
   geom_scattermore(pointsize = 2.5) +
   facet_wrap(~Sample, scales = "free", 
-             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "ClustSIGNAL_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "ClustSIGNAL") +
@@ -215,14 +223,17 @@ me_cSIGNAL <- ggplot(clustDF_me, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-
+ggsave("./data_outputs/visuals/Bench_ME_cSIGNALplots_v2.pdf", plot = me_cSIGNAL, 
+       width = 8.5, height = 4, units = "in")
 
 #### Xenium breast cancer
 
 br_cSIGNAL <- ggplot(clustDF_br, aes(x = x, y = -y, color = ClustSIGNAL)) +
   geom_scattermore(pointsize = 1.5) +
   facet_wrap(~Sample, scales = "free", ncol = 1, 
-             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "BR", ],
+                                           "ClustSIGNAL_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "ClustSIGNAL") +
@@ -235,6 +246,8 @@ br_cSIGNAL <- ggplot(clustDF_br, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_BR_cSIGNALplots_v2.pdf", plot = br_cSIGNAL, 
+       width = 7, height = 8, units = "in")
 
 
 #### CosMx lung cancer
@@ -242,7 +255,9 @@ br_cSIGNAL <- ggplot(clustDF_br, aes(x = x, y = -y, color = ClustSIGNAL)) +
 lc_cSIGNAL <- ggplot(clustDF_lc, aes(x = x, y = -y, color = ClustSIGNAL)) +
   geom_scattermore(pointsize = 1.5) +
   facet_wrap(~Sample, scales = "free", ncol = 3,
-             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "LC", ],
+                                           "ClustSIGNAL_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "ClustSIGNAL") +
@@ -255,6 +270,8 @@ lc_cSIGNAL <- ggplot(clustDF_lc, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_LC_cSIGNALplots_v2.pdf", plot = lc_cSIGNAL, 
+       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -262,7 +279,9 @@ lc_cSIGNAL <- ggplot(clustDF_lc, aes(x = x, y = -y, color = ClustSIGNAL)) +
 mh_cSIGNAL <- ggplot(clustDF_mh, aes(x = x, y = -y, color = ClustSIGNAL)) +
   geom_scattermore(pointsize = 4) +
   facet_wrap(~Sample, scales = "free", ncol = 12, 
-             labeller = labeller(Sample = ari_label(metrics, "ClustSIGNAL_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "MH", ],
+                                           "ClustSIGNAL_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
   labs(color = "ClustSIGNAL") +
@@ -275,9 +294,59 @@ mh_cSIGNAL <- ggplot(clustDF_mh, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_MH_cSIGNALplots_v2.pdf", plot = mh_cSIGNAL, 
+       width = 17, height = 19, units = "in")
+
+
+#### SteroSeq ovarian cancer
+
+oc_cSIGNAL <- ggplot(clustDF_oc, aes(x = x, y = -y, color = ClustSIGNAL)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "OC", ],
+                                           "ClustSIGNAL_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "ClustSIGNAL") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_OC_cSIGNALplots.pdf", plot = oc_cSIGNAL, 
+       width = 7, height = 7, units = "in")
+
+
+#### VisiumHD colon cancer
+
+coad_cSIGNAL <- ggplot(clustDF_coad, aes(x = x, y = -y, color = ClustSIGNAL)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "COAD", ],
+                                           "ClustSIGNAL_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "ClustSIGNAL") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_COAD_cSIGNALplots.pdf", plot = coad_cSIGNAL, 
+       width = 10, height = 8, units = "in")
 ```
 
-## 6-9 BANKSY
+## 8-13 BANKSY
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -285,7 +354,9 @@ mh_cSIGNAL <- ggplot(clustDF_mh, aes(x = x, y = -y, color = ClustSIGNAL)) +
 me_banksy <- ggplot(clustDF_me, aes(x = x, y = -y, color = BANKSY)) +
   geom_scattermore(pointsize = 2.5) +
   facet_wrap(~Sample, scales = "free",
-             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "BANKSY_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5), ncol = 3)) +
   labs(color = "BANKSY") +
@@ -298,6 +369,8 @@ me_banksy <- ggplot(clustDF_me, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_ME_Banksyplots_v2.pdf", plot = me_banksy, 
+       width = 9, height = 4, units = "in")
 
 
 #### Xenium breast cancer
@@ -305,7 +378,9 @@ me_banksy <- ggplot(clustDF_me, aes(x = x, y = -y, color = BANKSY)) +
 br_banksy <- ggplot(clustDF_br, aes(x = x, y = -y, color = BANKSY)) +
   geom_scattermore(pointsize = 1.5) +
   facet_wrap(~Sample, scales = "free", ncol = 1, 
-             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "BR", ],
+                                           "BANKSY_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "BANKSY") +
@@ -318,13 +393,18 @@ br_banksy <- ggplot(clustDF_br, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_BR_Banksyplots_v2.pdf", plot = br_banksy, 
+       width = 7, height = 8, units = "in")
+
 
 #### CosMx lung cancer
 
 lc_banksy <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BANKSY)) +
   geom_scattermore(pointsize = 1.5) +
   facet_wrap(~Sample, scales = "free", ncol = 3,
-             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "LC", ],
+                                           "BANKSY_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "BANKSY") +
@@ -337,6 +417,8 @@ lc_banksy <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_LC_Banksyplots_v2.pdf", plot = lc_banksy, 
+       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -344,7 +426,9 @@ lc_banksy <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BANKSY)) +
 mh_banksy <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BANKSY)) +
   geom_scattermore(pointsize = 4) +
   facet_wrap(~Sample, scales = "free", ncol = 12, 
-             labeller = labeller(Sample = ari_label(metrics, "BANKSY_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "MH", ],
+                                           "BANKSY_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
   labs(color = "BANKSY") +
@@ -357,9 +441,59 @@ mh_banksy <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_MH_Banksyplots_v2.pdf", plot = mh_banksy, 
+       width = 17, height = 19, units = "in")
+
+
+#### SteroSeq ovarian cancer
+
+oc_banksy <- ggplot(clustDF_oc, aes(x = x, y = -y, color = BANKSY)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "OC", ],
+                                           "BANKSY_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "BANKSY") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_OC_Banksyplots.pdf", plot = oc_banksy, 
+       width = 7, height = 7, units = "in")
+
+
+#### VisiumHD colon cancer
+
+coad_banksy <- ggplot(clustDF_coad, aes(x = x, y = -y, color = BANKSY)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "COAD", ],
+                                           "BANKSY_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "BANKSY") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_COAD_Banksyplots.pdf", plot = coad_banksy, 
+       width = 10, height = 8, units = "in")
 ```
 
-## 10-11 BASS
+## 14-18 BASS
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -367,7 +501,9 @@ mh_banksy <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BANKSY)) +
 me_bass <- ggplot(clustDF_me, aes(x = x, y = -y, color = BASS)) +
   geom_scattermore(pointsize = 2.5) +
   facet_wrap(~Sample, scales = "free",
-             labeller = labeller(Sample = ari_label(metrics, "BASS_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "BASS_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "BASS") +
@@ -380,6 +516,56 @@ me_bass <- ggplot(clustDF_me, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_ME_BASSplots_v2.pdf", plot = me_bass, 
+       width = 8.5, height = 4, units = "in")
+
+
+#### Xenium breast cancer
+
+br_bass <- ggplot(clustDF_br, aes(x = x, y = -y, color = BASS)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 1, 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "BR", ],
+                                           "BASS_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "BASS") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_BR_BASSplots.pdf", plot = br_bass, 
+       width = 7, height = 8, units = "in")
+
+
+#### CosMx lung cancer
+
+lc_bass <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BASS)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 3,
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "LC", ],
+                                           "BASS_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "BASS") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_LC_BASSplots.pdf", plot = lc_bass, 
+       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -387,7 +573,9 @@ me_bass <- ggplot(clustDF_me, aes(x = x, y = -y, color = BASS)) +
 mh_bass <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BASS)) +
   geom_scattermore(pointsize = 4) +
   facet_wrap(~Sample, scales = "free", ncol = 12, 
-             labeller = labeller(Sample = ari_label(metrics, "BASS_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "MH", ],
+                                           "BASS_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "BASS") +
@@ -400,17 +588,45 @@ mh_bass <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_MH_BASSplots_v2.pdf", plot = mh_bass, 
+       width = 17, height = 19, units = "in")
+
+
+#### SteroSeq ovarian cancer
+
+oc_bass <- ggplot(clustDF_oc, aes(x = x, y = -y, color = BASS)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "OC", ],
+                                           "BASS_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "BASS") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_OC_BASSplots.pdf", plot = oc_bass, 
+       width = 7, height = 7, units = "in")
 ```
 
-## 12-13 SpatialPCA
+## 19-20 SpatialPCA
 
 ```{r}
 #### SeqFISH mouse embryo
 
-sp_sPCA <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpatialPCA)) +
+me_sPCA <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpatialPCA)) +
   geom_scattermore(pointsize = 2.5) +
   facet_wrap(~Sample, scales = "free",
-             labeller = labeller(Sample = ari_label(metrics, "SpatialPCA_ari"))) +
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                                    "SpatialPCA_ari"))) +
   scale_color_manual(values = colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "SpatialPCA") +
@@ -423,11 +639,13 @@ sp_sPCA <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpatialPCA)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_ME_sPCAplots_v2.pdf", plot = me_sPCA, 
+       width = 8.7, height = 4, units = "in")
 
 
 #### MERFISH mouse hypothalamus
 
-sp_sPCA <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpatialPCA)) +
+mh_sPCA <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpatialPCA)) +
   geom_scattermore(pointsize = 4) +
   facet_wrap(~Sample, scales = "free", ncol = 12, 
              labeller = labeller(Sample = ari_label(metrics, "SpatialPCA_ari"))) +
@@ -443,7 +661,283 @@ sp_sPCA <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpatialPCA)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_MH_sPCAplots_v2.pdf", plot = mh_sPCA, 
+       width = 17, height = 19, units = "in")
 ```
+
+## 21 GraphST
+
+```{r}
+#### SeqFISH mouse embryo
+
+me_graphst <- ggplot(clustDF_me, aes(x = x, y = -y, color = GraphST)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free", 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "GraphST_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "GraphST") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_ME_GraphSTplots.pdf", plot = me_graphst, 
+       width = 8.5, height = 4, units = "in")
+```
+
+## 22-25 SpaGCN
+
+```{r}
+#### SeqFISH mouse embryo
+
+me_spagcn <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpaGCN)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free", 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "SpaGCN_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "SpaGCN") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_ME_SpaGCNplots.pdf", plot = me_spagcn, 
+       width = 8.5, height = 4, units = "in")
+
+#### Xenium breast cancer
+
+br_spagcn <- ggplot(clustDF_br, aes(x = x, y = -y, color = SpaGCN)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 1, 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "BR", ],
+                                           "SpaGCN_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "SpaGCN") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_BR_SpaGCNplots.pdf", plot = br_spagcn, 
+       width = 7, height = 8, units = "in")
+
+
+#### CosMx lung cancer
+
+lc_spagcn <- ggplot(clustDF_lc, aes(x = x, y = -y, color = SpaGCN)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 3,
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "LC", ],
+                                           "SpaGCN_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "SpaGCN") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_LC_SpaGCNplots.pdf", plot = lc_spagcn, 
+       width = 10, height = 8, units = "in")
+
+
+#### MERFISH mouse hypothalamus
+
+mh_spagcn <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpaGCN)) +
+  geom_scattermore(pointsize = 4) +
+  facet_wrap(~Sample, scales = "free", ncol = 12, 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "MH", ],
+                                           "SpaGCN_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "SpaGCN") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_MH_SpaGCNplots.pdf", plot = mh_spagcn, 
+       width = 17, height = 19, units = "in")
+```
+
+## 26-32 STAGATE
+
+```{r}
+#### SeqFISH mouse embryo
+
+me_stagate <- ggplot(clustDF_me, aes(x = x, y = -y, color = STAGATE)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free", 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "STAGATE_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "STAGATE") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_ME_STAGATEplots.pdf", plot = me_stagate, 
+       width = 10, height = 5, units = "in")
+
+
+#### Xenium breast cancer
+
+br_stagate <- ggplot(clustDF_br, aes(x = x, y = -y, color = STAGATE)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 1, 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "BR", ],
+                                           "STAGATE_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "STAGATE") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_BR_STAGATEplots.pdf", plot = br_stagate, 
+       width = 9, height = 9, units = "in")
+
+
+#### CosMx lung cancer
+
+lc_stagate <- ggplot(clustDF_lc, aes(x = x, y = -y, color = STAGATE)) +
+  geom_scattermore(pointsize = 1.5) +
+  facet_wrap(~Sample, scales = "free", ncol = 3,
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "LC", ],
+                                           "STAGATE_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "STAGATE") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_LC_STAGATEplots.pdf", plot = lc_stagate, 
+       width = 10, height = 8, units = "in")
+
+
+#### MERFISH mouse hypothalamus
+
+mh_stagate <- ggplot(clustDF_mh, aes(x = x, y = -y, color = STAGATE)) +
+  geom_scattermore(pointsize = 4) +
+  facet_wrap(~Sample, scales = "free", ncol = 12, 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "MH", ],
+                                           "STAGATE_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 1)) +
+  labs(color = "STAGATE") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_MH_STAGATEplots.pdf", plot = mh_stagate, 
+       width = 17, height = 19, units = "in")
+
+
+#### SteroSeq ovarian cancer
+
+oc_stagate <- ggplot(clustDF_oc, aes(x = x, y = -y, color = STAGATE)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "OC", ],
+                                           "STAGATE_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 2)) +
+  labs(color = "STAGATE") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_OC_STAGATEplots.pdf", plot = oc_stagate, 
+       width = 8, height = 7, units = "in")
+
+
+#### VisiumHD colon cancer
+
+coad_stagate <- ggplot(clustDF_coad, aes(x = x, y = -y, color = STAGATE)) +
+  geom_scattermore(pointsize = 1) +
+  facet_wrap(~Sample, scales = "free",
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "COAD", ],
+                                           "STAGATE_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5), ncol = 2)) +
+  labs(color = "STAGATE") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 10),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Bench_COAD_STAGATEplots.pdf", plot = coad_stagate, 
+       width = 11, height = 8, units = "in")
+```
+
+
 
 # Suppl Figs. 14
 
@@ -470,6 +964,8 @@ all_resPlot <- all_resources %>%
         legend.text = element_text(size = 12),
         legend.title = element_text(size = 14))
 ```
+
+
 
 # Suppl Figs. 15
 
@@ -745,6 +1241,8 @@ markerPlot_spinal <- summary_data %>%
         legend.text = element_text(size = 12)) 
 ```
 
+
+
 # Suppl Figs. 16-17
 
 ```{r}
@@ -807,6 +1305,8 @@ inhib_clust <- plotReducedDim(spe_mh, dimred = "spatial",
         legend.text = element_text(size = 12),
         legend.title = element_text(size = 14))
 ```
+
+
 
 # Suppl Fig. 18
 
@@ -1307,6 +1807,8 @@ ova15_plot <- ggplot(go_enrich_15[go_enrich_15$Count >= 5,],
         legend.key.height = unit(0.3, "cm"))
 ```
 
+
+
 # Suppl Fig. 19
 
 ```{r}
@@ -1631,6 +2133,8 @@ genes_plotList <- setNames(lapply(markers_8, function(g) {
 gene_plot <- annot_plot + clust_plot + wrap_plots(genes_plotList, nrow = 1) +
   plot_layout(widths = c(1, 1, 7))
 ```
+
+
 
 # Suppl Fig. 20
 
