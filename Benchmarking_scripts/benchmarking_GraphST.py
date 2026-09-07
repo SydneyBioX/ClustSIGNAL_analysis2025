@@ -40,7 +40,7 @@ def run_graphst(in_file_path, seed, n_clusters, start, end, increment):
     # joining all sample adata
     adata_comb = ad.concat(adata_list)
     # louvain clustering
-    clustering(adata_comb, n_clusters, method='louvain', start=start, end=end, increment=increment)
+    clustering(adata_comb, n_clusters, method='louvain', start = start, end = end, increment = increment)
     return adata_comb
 
 
@@ -48,18 +48,18 @@ def run_graphst(in_file_path, seed, n_clusters, start, end, increment):
 
 #### SeqFISH mouse embryo data
 seed = 567
-n_clusters = 23 # louvain resolution search not working for 23 clusters
+n_clusters = 23
 start, end, increment = 0.1, 3.0, 0.01 # default
 in_file_path = "./data_outputs/annDataFiles/mouse_embryo/"
 
 start_time = time.perf_counter()
-mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval=True, max_usage=True)
+mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval = True, max_usage = True)
 end_time = time.perf_counter()
 end_time - start_time
 
 # saving data
 labels_df = adata_out.obs[['domain', 'louvain']].copy()
-labels_df.to_csv("./data_outputs/benchmarkOut/graphst_me.csv", index=True, index_label="cell_id")
+labels_df.to_csv("./data_outputs/benchmarkOut/graphst_me.csv", index = True, index_label = "cell_id")
 
 metrics_df = pd.DataFrame({
     "peak_memory_MB": [mem_usage],    # Update the unit label if yours is GB/KB
@@ -80,7 +80,7 @@ start, end, increment = 0.1, 3.0, 0.01 # default
 in_file_path = "./data_outputs/annDataFiles/breast_cancer/"
 
 start_time = time.perf_counter()
-mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval=True, max_usage=True)
+mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval = True, max_usage = True)
 end_time = time.perf_counter()
 end_time - start_time
 # Run ended with memory usage >400 GB
@@ -95,7 +95,7 @@ start, end, increment = 0.1, 3.0, 0.01 # default
 in_file_path = "./data_outputs/annDataFiles/mouse_brain/"
 
 start_time = time.perf_counter()
-mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval=True, max_usage=True)
+mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval = True, max_usage = True)
 end_time = time.perf_counter()
 end_time - start_time
 # Runtime exceeded 4 days.
@@ -110,7 +110,7 @@ start, end, increment = 0.1, 3.0, 0.01 # default
 in_file_path = "./data_outputs/annDataFiles/lung_cancer/"
 
 start_time = time.perf_counter()
-mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval=True, max_usage=True)
+mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval = True, max_usage = True)
 end_time = time.perf_counter()
 end_time - start_time
 # Run ended with memory usage >400 GB
@@ -125,7 +125,7 @@ start, end, increment = 0.1, 3.0, 0.01 # default
 in_file_path = "./data_outputs/annDataFiles/ovarian_cancer/"
 
 start_time = time.perf_counter()
-mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval=True, max_usage=True)
+mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval = True, max_usage = True)
 end_time = time.perf_counter()
 end_time - start_time
 # Run ended with memory usage >400 GB
@@ -140,7 +140,30 @@ start, end, increment = 0.1, 3.0, 0.01 # default
 in_file_path = "./data_outputs/annDataFiles/colon_cancer/"
 
 start_time = time.perf_counter()
-mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval=True, max_usage=True)
+mem_usage, adata_out = memory_usage((run_graphst, (in_file_path, seed, n_clusters, start, end, increment)), retval = True, max_usage = True)
 end_time = time.perf_counter()
 end_time - start_time
 # Run ended with memory usage >400 GB
+
+
+
+
+#### SeqFISH mouse embryo data with PASTE alignment
+# setting seed
+random.seed(567)
+np.random.seed(567)
+torch.manual_seed(567)
+# setting the device to cpu
+device = torch.device('cpu')
+# reading merged anndata file with aligned coordinates
+adata = sc.read_h5ad("./data_outputs/annDataFiles/mouse_embryo/Embryo_aligned_merged.h5ad")
+# running graphST
+model = GraphST.GraphST(adata, datatype = 'Stereo', device = device)
+# running model training
+adata = model.train()
+# louvain clustering
+clustering(adata, n_clusters = 23, method = 'louvain', start = 0.1, end = 3.0, increment = 0.01)
+# saving data
+labels_df = adata.obs[['domain', 'louvain']].copy()
+labels_df.to_csv("./data_outputs/benchmarkOut/paste_graphst_me.csv", index = True, index_label = "cell_id")
+adata.write_h5ad("./data_outputs/annDataFiles/mouse_embryo/Embryo_aligned_merged_graphst.h5ad")

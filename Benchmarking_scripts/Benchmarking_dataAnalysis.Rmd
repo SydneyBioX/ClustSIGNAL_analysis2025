@@ -533,13 +533,6 @@ spe_mh <- readRDS("./spe_mouseHypothal.Rds") # spe object of downloaded data
 # removing ambiguous cells - possible doublets
 spe_mh <- spe_mh[, spe_mh$Cell_class != "Ambiguous"]
 spe_mh$Cell_class <- factor(spe_mh$Cell_class)
-
-# creating anndata files for GraphST runs
-create_annFiles(spe = spe_mh, sample_label = "samples",
-                fileSavepath = "./data_outputs/annDataFiles/mouse_brain/",
-                keep_cols = c("Cell_ID", "Animal_ID", "Animal_sex", "Behavior",
-                              "Bregma", "Cell_class", "Neuron_cluster_ID", 
-                              "samples"))
 ```
 
 ```{r}
@@ -837,8 +830,7 @@ clustDF_oc <- data.frame(Dataset = "OC",
                          Sample = cSIGNAL_oc$sample_id,
                          x = spatialCoords(cSIGNAL_oc)[, 1],
                          y = spatialCoords(cSIGNAL_oc)[, 2],
-                         Celltype = cSIGNAL_oc$annotation,
-                         Niche = cSIGNAL_oc$spatial_cluster) %>%
+                         Celltype = cSIGNAL_oc$spatial_cluster) %>%
   mutate(ClustSIGNAL = cSIGNAL_oc$ClustSIGNAL,
          BANKSY = banksy_oc$clust_PCA_M1_lam0.2_k50_res1,
          BASS = factor(unlist(BASS_oc@results$c)),
@@ -860,7 +852,7 @@ saveRDS(clustDF_oc, file = "./data_outputs/benchmarkOut/BenchDF_oc.Rds")
 Gene expression and metadata were downloaded from https://spatch.pku-genomics.org/#/dataset/visium, and stored in a spe object.
 
 ```{r}
-spe_coad <- readRDS("./spe_colonCancer.Rds")
+spe_coad <- readRDS("./spe_colonCancer.Rds") # spe object of downloaded data
 ```
 
 ```{r}
@@ -1001,8 +993,7 @@ clustDF_coad <- data.frame(Dataset = "COAD",
                          Sample = cSIGNAL_coad$sample_id,
                          x = spatialCoords(cSIGNAL_coad)[, 1],
                          y = spatialCoords(cSIGNAL_coad)[, 2],
-                         Celltype = cSIGNAL_coad$annotation,
-                         Niche = cSIGNAL_coad) %>%
+                         Celltype = cSIGNAL_coad$spatial_cluster) %>%
   mutate(ClustSIGNAL = cSIGNAL_coad$ClustSIGNAL,
          BANKSY = banksy_coad$clust_PCA_M1_lam0.2_k50_res1,
          BASS = NA,
@@ -1161,12 +1152,3 @@ all_resources <- all_resources %>%
 saveRDS(all_resources, "./data_outputs/benchmarkOut/resources_revised.Rds")
 ```
 
-
-
-
-# Benchmarking multisample analysis
-
-```{r}
-
-
-```
