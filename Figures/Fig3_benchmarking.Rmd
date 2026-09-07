@@ -52,11 +52,6 @@ methodColors <- setNames(c("#0F4A9C", "#3dd3b9", "#ff891c", "#E1C239",
                            "#D81B60", "#7B1FA2", "#2E7D32"),
                          c("ClustSIGNAL", "BANKSY", "BASS", "SpatialPCA", 
                            "STAGATE", "SpaGCN", "GraphST"))
-methodColors <- setNames(c("#173b66", "#3dd3b9", "#ff891c", "#E1C239", 
-                           "#D81B60", "#7B1FA2", "#2E7D32"),
-                         c("ClustSIGNAL", "BANKSY", "BASS", "SpatialPCA", 
-                           "STAGATE", "SpaGCN", "GraphST"))
-
 ```
 
 # Panels a-f - spatial plots
@@ -78,6 +73,8 @@ clustDF_sub <- rbind(
   clustDF_mh[clustDF_mh$Sample == "7.-0.29", ],
   clustDF_oc,
   clustDF_coad)
+rm(clustDF_me, clustDF_br, clustDF_lc, clustDF_mh, clustDF_oc, clustDF_coad)
+gc()
 
 # converting data frame into long format
 clustDF_melt <- 
@@ -158,7 +155,7 @@ spatialPlots_list <- setNames(
 # combining the spatial plots
 sp_plots_comb <- wrap_plots(spatialPlots_list, nrow = 6) + 
   plot_layout(axes = "collect", guides = "collect", heights = c(5, 4, 4, 4, 5, 4))
-ggsave("./data_outputs/visuals/Fig.3_bench.pdf", plot = sp_plots_comb, 
+ggsave("./data_outputs/visuals/Fig.3_bench_v2.pdf", plot = sp_plots_comb, 
        width = 15, height = 10, units = "in")
 ```
 
@@ -191,7 +188,7 @@ ari_plot <- ari_metrics %>%
              colour = Methods, fill = Methods)) +
   geom_boxplot(alpha = 0.8) +
   labs(x = "Dataset", y = "ARI") +
-  # ylim(0, 0.85) +
+  ylim(0, 1) +
   scale_y_continuous(limits = c(0, 0.85), breaks = seq(0, 1, by = 0.1)) +
   scale_color_manual(values = methodColors) +
   scale_fill_manual(values = methodColors) +
@@ -274,6 +271,6 @@ comb_resource_plot <- ari_plot + (runtime_plot / memUsage_plot) +
   theme(legend.position = "bottom")
 # ggsave("./data_outputs/visuals/Bench_all_resources_bars_ed.pdf",
 #        plot = comb_resource_plot, width = 15, height = 6, units = "in")
-ggsave("./data_outputs/visuals/Bench_all_resources_lines.pdf",
+ggsave("./data_outputs/visuals/Bench_all_resources_lines_v2.pdf",
        plot = comb_resource_plot, width = 15, height = 6, units = "in")
 ```
