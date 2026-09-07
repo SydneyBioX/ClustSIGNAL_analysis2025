@@ -18,6 +18,8 @@ library(SpatialExperiment)
 library(dplyr)
 library(scran)
 library(reshape2)
+library(Matrix)
+library(tidyverse)
 
 library(scater)
 library(ggplot2)
@@ -33,8 +35,45 @@ library(clusterProfiler)
 ```
 
 
-
 # Suppl Fig. 1
+
+```{r}
+# sparsity measures of the datasets - raw counts and smoothed data
+sparsity_counts <- readRDS("./data_outputs/realDataOut/sparsity_counts.Rds")
+sparsity_smoothed <- readRDS("./data_outputs/realDataOut/sparsity_smoothed.Rds")
+
+sparsity_plot <- 
+  left_join(sparsity_counts, sparsity_smoothed, by = "Technology") %>%
+  select(Technology, Percent_NonZero_counts, Percent_NonZero_smoothed) %>%
+  pivot_longer(cols = c(Percent_NonZero_counts, Percent_NonZero_smoothed), 
+               names_to = "Datatype", values_to = "Percent_NonZero") %>%
+  mutate(Datatype = 
+           recode(Datatype, 
+                  "Percent_NonZero_counts" = "Measured expression",
+                  "Percent_NonZero_smoothed" = "Smoothed expression"),
+         Technology = factor(Technology, 
+                             levels = c("Stere-seq", "VisiumHD", "CosMx",
+                                        "Xenium", "SeqFISH", "MERFISH"))) %>%
+  ggplot(aes(x = Technology, y = Percent_NonZero, group = Datatype, fill = Datatype)) +
+  geom_col(position = "dodge") +
+  # facet_wrap(~Datatype, nrow = 1) +
+  labs(x = "", y = "Non-zero expression (%)") +
+  scale_fill_manual(values = c("Measured expression" = "#3d405b",
+                                "Smoothed expression" = "#e07a5f")) +
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12))
+ggsave("./data_outputs/visuals/Suppl_sparsity.pdf", sparsity_plot, width = 5, 
+       height = 6, units = "in")
+```
+
+# Suppl Fig. 2
 
 ```{r}
 # neighbourhood size colors
@@ -153,7 +192,7 @@ panel_b <- ggplot(ari_summary2, aes(x = k_centroids, y = ClusterVar,
 
 
 
-# Suppl Figs. 2-13
+# Suppl Figs. 3-33
 
 ```{r}
 # color panel
@@ -200,7 +239,7 @@ ari_label <- function(metrics, colName) {
 }
 ```
 
-## 2-7 ClustSIGNAL
+## 3-8 ClustSIGNAL
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -346,7 +385,7 @@ ggsave("./data_outputs/visuals/Bench_COAD_cSIGNALplots.pdf", plot = coad_cSIGNAL
        width = 10, height = 8, units = "in")
 ```
 
-## 8-13 BANKSY
+## 9-14 BANKSY
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -493,7 +532,7 @@ ggsave("./data_outputs/visuals/Bench_COAD_Banksyplots.pdf", plot = coad_banksy,
        width = 10, height = 8, units = "in")
 ```
 
-## 14-18 BASS
+## 15-19 BASS
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -616,7 +655,7 @@ ggsave("./data_outputs/visuals/Bench_OC_BASSplots.pdf", plot = oc_bass,
        width = 7, height = 7, units = "in")
 ```
 
-## 19-20 SpatialPCA
+## 20-21 SpatialPCA
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -665,7 +704,7 @@ ggsave("./data_outputs/visuals/Bench_MH_sPCAplots_v2.pdf", plot = mh_sPCA,
        width = 17, height = 19, units = "in")
 ```
 
-## 21 GraphST
+## 22 GraphST
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -692,7 +731,7 @@ ggsave("./data_outputs/visuals/Bench_ME_GraphSTplots.pdf", plot = me_graphst,
        width = 8.5, height = 4, units = "in")
 ```
 
-## 22-25 SpaGCN
+## 23-26 SpaGCN
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -790,7 +829,7 @@ ggsave("./data_outputs/visuals/Bench_MH_SpaGCNplots.pdf", plot = mh_spagcn,
        width = 17, height = 19, units = "in")
 ```
 
-## 26-32 STAGATE
+## 27-33 STAGATE
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -937,9 +976,14 @@ ggsave("./data_outputs/visuals/Bench_COAD_STAGATEplots.pdf", plot = coad_stagate
        width = 11, height = 8, units = "in")
 ```
 
+# Suppl Figs. 34
 
+```{r}
+# Multi-sample analysis with and without Harmony or spatial alignment
 
-# Suppl Figs. 14
+```
+
+# Suppl Figs. 35
 
 ```{r}
 # reading computing performance metrics from benchmarking
@@ -967,7 +1011,7 @@ all_resPlot <- all_resources %>%
 
 
 
-# Suppl Figs. 15
+# Suppl Figs. 36
 
 ```{r}
 # reading spe object with ClustSIGNAL clusters
@@ -1243,7 +1287,7 @@ markerPlot_spinal <- summary_data %>%
 
 
 
-# Suppl Figs. 16-17
+# Suppl Figs. 37-38
 
 ```{r}
 # reading spe object with ClustSIGNAL clusters
@@ -1308,7 +1352,7 @@ inhib_clust <- plotReducedDim(spe_mh, dimred = "spatial",
 
 
 
-# Suppl Fig. 18
+# Suppl Fig. 39
 
 ```{r}
 # reading spe object with ClustSIGNAL clusters
@@ -1809,7 +1853,7 @@ ova15_plot <- ggplot(go_enrich_15[go_enrich_15$Count >= 5,],
 
 
 
-# Suppl Fig. 19
+# Suppl Fig. 40
 
 ```{r}
 # reading spe object with ClustSIGNAL clusters
@@ -2136,7 +2180,7 @@ gene_plot <- annot_plot + clust_plot + wrap_plots(genes_plotList, nrow = 1) +
 
 
 
-# Suppl Fig. 20
+# Suppl Fig. 41
 
 ```{r}
 #### function for calculating sample-level entropy metrics

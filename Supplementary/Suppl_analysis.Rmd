@@ -26,6 +26,68 @@ library(clustSIGNAL)
 
 # Supplementary material
 
+## Assessing data sparssity
+
+```{r}
+#### Sparsity of raw counts
+
+# spe objects of downloaded data
+spe_me <- readRDS("./spe_mouseEmbryo.Rds")
+spe_br <- readRDS("./spe_breastCancer.Rds")
+spe_lc <- readRDS("./spe_lungNSCLC.Rds")
+spe_mh <- readRDS("./spe_mouseHypothal.Rds")
+spe_oc <- readRDS("./spe_ovarianCancer.Rds")
+spe_coad <- readRDS("./spe_colonCancer.Rds")
+
+spe_list <- c("SeqFISH" = spe_me, "Xenium" = spe_br, "CosMx" = spe_lc, 
+              "MERFISH" = spe_mh, "Stere-seq" = spe_oc, "VisiumHD" = spe_coad)
+
+sparse_c_df <- imap_dfr(spe_list, function(spe, tech) {
+  # calculating total expression values in the data
+  tot_elem <- as.numeric(nrow(spe)) * as.numeric(ncol(spe))
+  # calculating non-zero expression values
+  nz_elem <- nnzero(counts(spe))
+  # calculating percentage of non-zero expression values
+  perc_nz <- (nz_elem / tot_elem) * 100
+  # creating dataframe
+  data.frame(Technology = tech,
+             Total_counts = tot_elem,
+             NonZero_counts = nz_elem,
+             Percent_NonZero_counts = perc_nz)
+})
+saveRDS(sparse_c_df, "./data_outputs/realDataOut/sparsity_counts.Rds")
+
+
+#### Sparsity of smoothed counts
+
+# spe objects of ClustSIGNAL runs containing smoothed data
+cSIGNAL_me <- readRDS("./data_outputs/benchmarkOut/spe_me_cSIGNAL.Rds")
+cSIGNAL_br <- readRDS("./data_outputs/benchmarkOut/spe_br_cSIGNAL.Rds")
+cSIGNAL_lc <- readRDS("./data_outputs/benchmarkOut/spe_lc_cSIGNAL.Rds")
+cSIGNAL_mh <- readRDS("./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
+cSIGNAL_oc <- readRDS("./data_outputs/benchmarkOut/spe_oc_cSIGNAL.Rds")
+cSIGNAL_coad <- readRDS("./data_outputs/benchmarkOut/spe_coad_cSIGNAL.Rds")
+
+spe_list <- c("SeqFISH" = cSIGNAL_me, "Xenium" = cSIGNAL_br, 
+              "CosMx" = cSIGNAL_lc, "MERFISH" = cSIGNAL_mh, 
+              "Stere-seq" = cSIGNAL_oc, "VisiumHD" = cSIGNAL_coad)
+
+sparse_s_df <- imap_dfr(spe_list, function(spe, tech) {
+  # calculating total expression values in the data
+  tot_elem <- as.numeric(nrow(spe)) * as.numeric(ncol(spe))
+  # calculating non-zero expression values
+  nz_elem <- nnzero(assay(spe, "smoothed"))
+  # calculating percentage of non-zero expression values
+  perc_nz <- (nz_elem / tot_elem) * 100
+  # creating dataframe
+  data.frame(Technology = tech,
+             Total_smoothed = tot_elem,
+             NonZero_smoothed = nz_elem,
+             Percent_NonZero_smoothed = perc_nz)
+})
+saveRDS(sparse_s_df, "./data_outputs/realDataOut/sparsity_smoothed.Rds")
+```
+
 ## Keren et al, 2018 data analysis
 
 Data were extracted as a spatial proteomics spe object from SpatialDatasets 
@@ -126,3 +188,62 @@ res <- clustSIGNAL(speK, dimRed = "PCA", samples = "imageID", batch_by = TRUE,
 saveRDS(res, "./data_outputs/Keren_2018/res_cSIGNAL.Rds")
 ```
 
+
+
+## Benchmarking multisample analysis
+
+```{r}
+#### PASTE alignment + ClustSIGNAL analysis of mouse embryo samples ####
+
+# PASTE applied using the script in benchmarking_PASTE.py
+# Aligned coordinates = "./data_outputs/benchmarkOut/Aligned_coords_ME.csv"
+
+
+## loading aligned coordinates
+me_align_coords <- read.csv("./data_outputs/benchmarkOut/Aligned_coords_ME.csv")
+# loading and pre-processing mouse embryo spe object
+spe_me <- readRDS("./spe_mouseEmbryo.Rds") # spe object of downloaded data
+spe_me <- spe_me[, spe_me$celltype_mapped_refined != "Low quality"]
+spe_me$celltype_mapped_refined <- factor(spe_me$celltype_mapped_refined)
+
+## adding aligned coordinates
+# storing original coordinates with metadata
+colData(spe_me) <- cbind(colData(spe_me), as.data.frame(spatialCoords(spe_me)))
+# adding aligned coordinates to metadata
+join_df <- left_join(as.data.frame(colData(spe_me)), me_align_coords, 
+                             by = c("uniqueID" = "X"))
+spe_me$x_aligned <- join_df$x_aligned
+spe_me$y_aligned <- join_df$y_aligned
+# adding aligned coordinates to spatial coordinates slot of spe object
+spatialCoords(spe_me) <- as.matrix(colData(spe_me)[, c("x_aligned", "y_aligned")])
+
+
+## running ClustSIGNAL
+set.seed(567)
+cSIGNAL_me <- clustSIGNAL(spe_me, samples = "embryo", outputs = "s")
+saveRDS(cSIGNAL_me$spe_final, 
+        file = "./data_outputs/benchmarkOut/spe_me_PASTE_cSIGNAL.Rds")
+```
+
+```{r}
+#### PASTE alignment + GraphST analysis of mouse embryo samples
+
+# PASTE applied to each dataset using the script in benchmarking_PASTE.py
+# Anndata object with aligned coordinates = "./data_outputs/annDataFiles/mouse_embryo/Embryo_aligned_merged.h5ad"
+
+# GraphST run using the script in benchmarking_GraphST.py
+# Cluster labels = "./data_outputs/benchmarkOut/paste_graphst_me.csv"
+```
+
+```{r}
+#### ClustSIGNAL + Harmony on lung cancer samples
+
+spe_lc <- readRDS("./spe_lungNSCLC.Rds") # spe object of downloaded data
+
+set.seed(567)
+cSIGNAL_lc <- clustSIGNAL(spe_lc, samples = "Run_Tissue_name", threads = 16, 
+                          batch = T, batch_by = "patient", outputs = "s")
+
+saveRDS(cSIGNAL_lc$spe_final, 
+        file = "./data_outputs/benchmarkOut/spe_lc_cSIGNAL_batch.Rds")
+```
