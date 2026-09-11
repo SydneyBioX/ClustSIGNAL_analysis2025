@@ -131,8 +131,6 @@ comb_neuron_plot <- neuron_annot + inhib_clust + excit_clust +
   theme(plot.margin = margin(0, 0, 0, 0),
         legend.position = "bottom",
         legend.direction = "vertical")
-ggsave("./data_outputs/visuals/Fig5a.pdf", comb_neuron_plot, units = "in",
-       width = 5.5, height = 8.5)
 ```
 
 #### Panel b
@@ -178,10 +176,6 @@ comp_htmap_mh <- Heatmap(cellMatrix_norm, name = "Proportion of cluster cells",
                            direction = "horizontal",
                            title_position = "lefttop",
                            legend_width = unit(3, "cm")))
-# saving figure
-pdf("./data_outputs/visuals/Fig5b.pdf", height = 4, width = 5)
-draw(comp_htmap_mh, heatmap_legend_side = "bottom")
-dev.off()
 ```
 
 #### Panel c
@@ -242,9 +236,6 @@ markerPlot_mh <- summary_data %>%
         legend.title = element_text(size = 14),
         legend.key.height = unit(0.5, "cm"),
         legend.text = element_text(size = 12))
-
-ggsave("./data_outputs/visuals/Fig5c.pdf", markerPlot_mh, units = "in",
-       height = 4, width = 6)
 ```
 
 #### Panel d
@@ -416,31 +407,31 @@ draw(ht_list, heatmap_legend_list = list(legend), heatmap_legend_side = "bottom"
 ```{r}
 #### functions to quantify, test, and plot neighbourhood proportions ####
 
-NN_cluster_analysis <- function(spe, cluster, samples_ord, knn5_neigh_data) {
+NN_cluster_analysis <- function(spe, cluster, samples_ord, knn_neigh_data) {
   
   #### Statistical test ####
   
   # order of source cell labels
   cluster_order <- c(clust, "Other")
   # combining data from all samples
-  knn5_df_list <- lapply(knn5_neigh_data, function(df) {
+  knn_df_list <- lapply(knn_neigh_data, function(df) {
     df %>% as.data.frame() %>% 
       rownames_to_column("Source_labels")
   })
-  knn5_df <- bind_rows(knn5_df_list) %>%
+  knn_df <- bind_rows(knn_df_list) %>%
     # adding sample name column
-    mutate(Sample = factor(rep(names(knn5_neigh_data), each = 2), 
+    mutate(Sample = factor(rep(names(knn_neigh_data), each = 2), 
                            levels = samples_ord),
            Source_labels = factor(as.character(Source_labels), 
                                   levels = cluster_order)) %>% 
     arrange(Sample, Source_labels)
   # renaming the rows - adding sample names
-  rownames(knn5_df) <- paste0(knn5_df$Sample, "---", 
-                              knn5_df$Source_labels)
+  rownames(knn_df) <- paste0(knn_df$Sample, "---", 
+                              knn_df$Source_labels)
   # melting data for analysis
-  knn5_df_melt <- reshape2::melt(knn5_df, variable.name = "Celltype", 
+  knn_df_melt <- reshape2::melt(knn_df, variable.name = "Celltype", 
                                  value.name = "Counts")
-  group_labels <- unique(knn5_df_melt$Celltype) # unique cell groups
+  group_labels <- unique(knn_df_melt$Celltype) # unique cell groups
   # defining empty dataframe
   test_df <- data.frame(matrix( 
     nrow = 0, ncol = 5, dimnames = list(c(),
@@ -451,7 +442,7 @@ NN_cluster_analysis <- function(spe, cluster, samples_ord, knn5_neigh_data) {
   for (c in sample_select) { # for each sample
     for (g in group_labels) { # for each cell group
       # subset input data frame by sample
-      sub_df <- knn5_df_melt[knn5_df_melt$Sample == c, ] %>%
+      sub_df <- knn_df_melt[knn_df_melt$Sample == c, ] %>%
         # create a label column for cell group and non-cell group class
         mutate(Cell_group_class = ifelse(Celltype == g, g, "Other"))
       # build contingency table of sum of neighbour cell counts
@@ -488,10 +479,10 @@ NN_cluster_analysis <- function(spe, cluster, samples_ord, knn5_neigh_data) {
     as.matrix()
   
   # calling heatmap plotting function
-  knn5_meanlogprop_ht <- 
-    NN_meanlog_substate_heatmap(spe, knn5_df, p_mat, samples_ord,
+  knn_meanlogprop_ht <- 
+    NN_meanlog_substate_heatmap(spe, knn_df, p_mat, samples_ord,
                                 cluster_order)
-  return(knn5_meanlogprop_ht)
+  return(knn_meanlogprop_ht)
 }
 
 
@@ -601,7 +592,7 @@ for (clust in c(inhibitory_clusters, excitatory_clusters)) {
   ht_list[[as.character(clust)]] <- NN_cluster_analysis(
     spe, cluster = clust,
     samples_ord = sample_select, 
-    knn5_neigh_data = neigh_data,
+    knn_neigh_data = neigh_data,
     plot_path = "./data_outputs/visuals/")
 }
 
@@ -684,7 +675,5 @@ ht_map <- Heatmap(count_mat,
             }
           }}
 )
-save_pdf(ht_map, "./data_outputs/visuals/Fig5e.pdf", units = "in", width = 14, 
-         height = 5)
 ```
 

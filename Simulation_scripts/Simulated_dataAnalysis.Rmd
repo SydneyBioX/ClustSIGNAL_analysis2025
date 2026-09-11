@@ -925,7 +925,8 @@ ari_iter_df$ari_Smooth0 <- as.numeric(ari_iter_df$ari_Smooth0)
 ari_iter_df$ari_Smooth0_k <- as.numeric(ari_iter_df$ari_Smooth0_k)
 ari_iter_df$ari_Smooth100 <- as.numeric(ari_iter_df$ari_Smooth100)
 ari_iter_df <- ari_iter_df %>% arrange(Pattern)
-saveRDS(ari_iter_df, file = "./data_outputs/simDataOut/ari_smoothBench_iter20.Rds")
+saveRDS(ari_iter_df, 
+        file = "./data_outputs/simDataOut/ari_smoothBench_iter20.Rds")
 ```
 
 ## Sparsity testing
@@ -997,7 +998,8 @@ ari_dsamp_df$ari_Smooth0 <- as.numeric(ari_dsamp_df$ari_Smooth0)
 ari_dsamp_df$ari_Smooth0_k <- as.numeric(ari_dsamp_df$ari_Smooth0_k)
 ari_dsamp_df$ari_Smooth100 <- as.numeric(ari_dsamp_df$ari_Smooth100)
 ari_dsamp_df <- ari_dsamp_df %>% arrange(Pattern)
-saveRDS(ari_dsamp_df, file = "./data_outputs/simDataOut/ari_sparsityRuns_iter20.Rds")
+saveRDS(ari_dsamp_df, 
+        file = "./data_outputs/simDataOut/ari_sparsityRuns_iter20.Rds")
 ```
 
 ## Segmentation error testing
@@ -1069,7 +1071,8 @@ ari_seg_df$ari_Smooth0 <- as.numeric(ari_seg_df$ari_Smooth0)
 ari_seg_df$ari_Smooth0_k <- as.numeric(ari_seg_df$ari_Smooth0_k)
 ari_seg_df$ari_Smooth100 <- as.numeric(ari_seg_df$ari_Smooth100)
 ari_seg_df <- ari_seg_df %>% arrange(Pattern)
-saveRDS(ari_seg_df, file = "./data_outputs/simDataOut/ari_segErrorRuns_iter20.Rds")
+saveRDS(ari_seg_df, 
+        file = "./data_outputs/simDataOut/ari_segErrorRuns_iter20.Rds")
 ```
 
 ## Clustering stability testing
@@ -1153,9 +1156,12 @@ for (i in seq_len(nrow(initC_tests))) { # for each pattern iteration
             initCluster_mbkmeans = length(unique(spe_mbkmeans$initCluster)),
             initSubcluster_mbkmeans = length(unique(spe_mbkmeans$initSubcluster)),
             ClustSIGNAL_mbkmeans = length(unique(spe_mbkmeans$ClustSIGNAL)),
-            ari_initC_mbkmeans = ARI(spe_louvain$initCluster, spe_mbkmeans$initCluster),
-            ari_initS_mbkmeans = ARI(spe_louvain$initSubcluster, spe_mbkmeans$initSubcluster),
-            ari_ClustSIGNAL_mbkmeans = ARI(spe_louvain$CellType, spe_mbkmeans$ClustSIGNAL),
+            ari_initC_mbkmeans = ARI(spe_louvain$initCluster,
+                                     spe_mbkmeans$initCluster),
+            ari_initS_mbkmeans = ARI(spe_louvain$initSubcluster,
+                                     spe_mbkmeans$initSubcluster),
+            ari_ClustSIGNAL_mbkmeans = ARI(spe_louvain$CellType,
+                                           spe_mbkmeans$ClustSIGNAL),
             # walktrap data
             EntropyCor_walk = cor(spe_louvain$entropy, spe_walk$entropy),
             initCluster_walk = length(unique(spe_walk$initCluster)),
@@ -1170,8 +1176,10 @@ for (i in seq_len(nrow(initC_tests))) { # for each pattern iteration
             initSubcluster_dbscan = length(unique(spe_dbscan$initSubcluster)),
             ClustSIGNAL_dbscan = length(unique(spe_dbscan$ClustSIGNAL)),
             ari_initC_dbscan = ARI(spe_louvain$initCluster, spe_dbscan$initCluster),
-            ari_initS_dbscan = ARI(spe_louvain$initSubcluster, spe_dbscan$initSubcluster),
-            ari_ClustSIGNAL_dbscan = ARI(spe_louvain$CellType, spe_dbscan$ClustSIGNAL)))
+            ari_initS_dbscan = ARI(spe_louvain$initSubcluster,
+                                   spe_dbscan$initSubcluster),
+            ari_ClustSIGNAL_dbscan = ARI(spe_louvain$CellType,
+                                         spe_dbscan$ClustSIGNAL)))
     print(paste("Run", i, "complete."))
 }
 output_initC_df <- output_initC_df %>% arrange(Pattern)

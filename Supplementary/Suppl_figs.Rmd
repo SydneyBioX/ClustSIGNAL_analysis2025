@@ -35,6 +35,7 @@ library(clusterProfiler)
 ```
 
 
+
 # Suppl Fig. 1
 
 ```{r}
@@ -54,9 +55,9 @@ sparsity_plot <-
          Technology = factor(Technology, 
                              levels = c("Stere-seq", "VisiumHD", "CosMx",
                                         "Xenium", "SeqFISH", "MERFISH"))) %>%
-  ggplot(aes(x = Technology, y = Percent_NonZero, group = Datatype, fill = Datatype)) +
+  ggplot(aes(x = Technology, y = Percent_NonZero, group = Datatype, 
+             fill = Datatype)) +
   geom_col(position = "dodge") +
-  # facet_wrap(~Datatype, nrow = 1) +
   labs(x = "", y = "Non-zero expression (%)") +
   scale_fill_manual(values = c("Measured expression" = "#3d405b",
                                 "Smoothed expression" = "#e07a5f")) +
@@ -69,9 +70,9 @@ sparsity_plot <-
         legend.position = "bottom",
         legend.title = element_blank(),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Suppl_sparsity.pdf", sparsity_plot, width = 5, 
-       height = 6, units = "in")
 ```
+
+
 
 # Suppl Fig. 2
 
@@ -192,7 +193,7 @@ panel_b <- ggplot(ari_summary2, aes(x = k_centroids, y = ClusterVar,
 
 
 
-# Suppl Figs. 3-33
+# Suppl Figs. 4-33
 
 ```{r}
 # color panel
@@ -239,7 +240,7 @@ ari_label <- function(metrics, colName) {
 }
 ```
 
-## 3-8 ClustSIGNAL
+## 4-9 ClustSIGNAL
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -262,8 +263,6 @@ me_cSIGNAL <- ggplot(clustDF_me, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_cSIGNALplots_v2.pdf", plot = me_cSIGNAL, 
-       width = 8.5, height = 4, units = "in")
 
 #### Xenium breast cancer
 
@@ -285,8 +284,6 @@ br_cSIGNAL <- ggplot(clustDF_br, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_BR_cSIGNALplots_v2.pdf", plot = br_cSIGNAL, 
-       width = 7, height = 8, units = "in")
 
 
 #### CosMx lung cancer
@@ -309,8 +306,6 @@ lc_cSIGNAL <- ggplot(clustDF_lc, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_LC_cSIGNALplots_v2.pdf", plot = lc_cSIGNAL, 
-       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -333,8 +328,6 @@ mh_cSIGNAL <- ggplot(clustDF_mh, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_MH_cSIGNALplots_v2.pdf", plot = mh_cSIGNAL, 
-       width = 17, height = 19, units = "in")
 
 
 #### SteroSeq ovarian cancer
@@ -357,8 +350,6 @@ oc_cSIGNAL <- ggplot(clustDF_oc, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_OC_cSIGNALplots.pdf", plot = oc_cSIGNAL, 
-       width = 7, height = 7, units = "in")
 
 
 #### VisiumHD colon cancer
@@ -381,11 +372,9 @@ coad_cSIGNAL <- ggplot(clustDF_coad, aes(x = x, y = -y, color = ClustSIGNAL)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_COAD_cSIGNALplots.pdf", plot = coad_cSIGNAL, 
-       width = 10, height = 8, units = "in")
 ```
 
-## 9-14 BANKSY
+## 10-15 BANKSY
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -408,8 +397,6 @@ me_banksy <- ggplot(clustDF_me, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_Banksyplots_v2.pdf", plot = me_banksy, 
-       width = 9, height = 4, units = "in")
 
 
 #### Xenium breast cancer
@@ -432,8 +419,6 @@ br_banksy <- ggplot(clustDF_br, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_BR_Banksyplots_v2.pdf", plot = br_banksy, 
-       width = 7, height = 8, units = "in")
 
 
 #### CosMx lung cancer
@@ -456,8 +441,6 @@ lc_banksy <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_LC_Banksyplots_v2.pdf", plot = lc_banksy, 
-       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -480,8 +463,6 @@ mh_banksy <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_MH_Banksyplots_v2.pdf", plot = mh_banksy, 
-       width = 17, height = 19, units = "in")
 
 
 #### SteroSeq ovarian cancer
@@ -504,8 +485,6 @@ oc_banksy <- ggplot(clustDF_oc, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_OC_Banksyplots.pdf", plot = oc_banksy, 
-       width = 7, height = 7, units = "in")
 
 
 #### VisiumHD colon cancer
@@ -528,11 +507,9 @@ coad_banksy <- ggplot(clustDF_coad, aes(x = x, y = -y, color = BANKSY)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_COAD_Banksyplots.pdf", plot = coad_banksy, 
-       width = 10, height = 8, units = "in")
 ```
 
-## 15-19 BASS
+## 16-20 BASS
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -555,8 +532,6 @@ me_bass <- ggplot(clustDF_me, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_BASSplots_v2.pdf", plot = me_bass, 
-       width = 8.5, height = 4, units = "in")
 
 
 #### Xenium breast cancer
@@ -579,8 +554,6 @@ br_bass <- ggplot(clustDF_br, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_BR_BASSplots.pdf", plot = br_bass, 
-       width = 7, height = 8, units = "in")
 
 
 #### CosMx lung cancer
@@ -603,8 +576,6 @@ lc_bass <- ggplot(clustDF_lc, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_LC_BASSplots.pdf", plot = lc_bass, 
-       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -627,8 +598,6 @@ mh_bass <- ggplot(clustDF_mh, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_MH_BASSplots_v2.pdf", plot = mh_bass, 
-       width = 17, height = 19, units = "in")
 
 
 #### SteroSeq ovarian cancer
@@ -651,11 +620,9 @@ oc_bass <- ggplot(clustDF_oc, aes(x = x, y = -y, color = BASS)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_OC_BASSplots.pdf", plot = oc_bass, 
-       width = 7, height = 7, units = "in")
 ```
 
-## 20-21 SpatialPCA
+## 21-22 SpatialPCA
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -678,8 +645,6 @@ me_sPCA <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpatialPCA)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_sPCAplots_v2.pdf", plot = me_sPCA, 
-       width = 8.7, height = 4, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -700,35 +665,6 @@ mh_sPCA <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpatialPCA)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_MH_sPCAplots_v2.pdf", plot = mh_sPCA, 
-       width = 17, height = 19, units = "in")
-```
-
-## 22 GraphST
-
-```{r}
-#### SeqFISH mouse embryo
-
-me_graphst <- ggplot(clustDF_me, aes(x = x, y = -y, color = GraphST)) +
-  geom_scattermore(pointsize = 2.5) +
-  facet_wrap(~Sample, scales = "free", 
-             labeller = 
-               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
-                                           "GraphST_ari"))) +
-  scale_color_manual(values = colors) +
-  guides(colour = guide_legend(override.aes = list(size = 5))) +
-  labs(color = "GraphST") +
-  theme_classic() +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.line = element_blank(),
-        axis.ticks = element_blank(),
-        strip.text = element_text(size = 14),
-        strip.background = element_blank(),
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_GraphSTplots.pdf", plot = me_graphst, 
-       width = 8.5, height = 4, units = "in")
 ```
 
 ## 23-26 SpaGCN
@@ -754,8 +690,6 @@ me_spagcn <- ggplot(clustDF_me, aes(x = x, y = -y, color = SpaGCN)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_SpaGCNplots.pdf", plot = me_spagcn, 
-       width = 8.5, height = 4, units = "in")
 
 #### Xenium breast cancer
 
@@ -777,8 +711,6 @@ br_spagcn <- ggplot(clustDF_br, aes(x = x, y = -y, color = SpaGCN)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_BR_SpaGCNplots.pdf", plot = br_spagcn, 
-       width = 7, height = 8, units = "in")
 
 
 #### CosMx lung cancer
@@ -801,8 +733,6 @@ lc_spagcn <- ggplot(clustDF_lc, aes(x = x, y = -y, color = SpaGCN)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_LC_SpaGCNplots.pdf", plot = lc_spagcn, 
-       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -825,11 +755,9 @@ mh_spagcn <- ggplot(clustDF_mh, aes(x = x, y = -y, color = SpaGCN)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_MH_SpaGCNplots.pdf", plot = mh_spagcn, 
-       width = 17, height = 19, units = "in")
 ```
 
-## 27-33 STAGATE
+## 27-32 STAGATE
 
 ```{r}
 #### SeqFISH mouse embryo
@@ -852,8 +780,6 @@ me_stagate <- ggplot(clustDF_me, aes(x = x, y = -y, color = STAGATE)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_ME_STAGATEplots.pdf", plot = me_stagate, 
-       width = 10, height = 5, units = "in")
 
 
 #### Xenium breast cancer
@@ -876,8 +802,6 @@ br_stagate <- ggplot(clustDF_br, aes(x = x, y = -y, color = STAGATE)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_BR_STAGATEplots.pdf", plot = br_stagate, 
-       width = 9, height = 9, units = "in")
 
 
 #### CosMx lung cancer
@@ -900,8 +824,6 @@ lc_stagate <- ggplot(clustDF_lc, aes(x = x, y = -y, color = STAGATE)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_LC_STAGATEplots.pdf", plot = lc_stagate, 
-       width = 10, height = 8, units = "in")
 
 
 #### MERFISH mouse hypothalamus
@@ -924,8 +846,6 @@ mh_stagate <- ggplot(clustDF_mh, aes(x = x, y = -y, color = STAGATE)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_MH_STAGATEplots.pdf", plot = mh_stagate, 
-       width = 17, height = 19, units = "in")
 
 
 #### SteroSeq ovarian cancer
@@ -948,8 +868,6 @@ oc_stagate <- ggplot(clustDF_oc, aes(x = x, y = -y, color = STAGATE)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_OC_STAGATEplots.pdf", plot = oc_stagate, 
-       width = 8, height = 7, units = "in")
 
 
 #### VisiumHD colon cancer
@@ -972,41 +890,40 @@ coad_stagate <- ggplot(clustDF_coad, aes(x = x, y = -y, color = STAGATE)) +
         strip.background = element_blank(),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
-ggsave("./data_outputs/visuals/Bench_COAD_STAGATEplots.pdf", plot = coad_stagate, 
-       width = 11, height = 8, units = "in")
 ```
 
-# Suppl Figs. 34
+## 33 GraphST
 
 ```{r}
-# Multi-sample analysis with and without Harmony or spatial alignment
+#### SeqFISH mouse embryo
 
+me_graphst <- ggplot(clustDF_me, aes(x = x, y = -y, color = GraphST)) +
+  geom_scattermore(pointsize = 2.5) +
+  facet_wrap(~Sample, scales = "free", 
+             labeller = 
+               labeller(Sample = ari_label(metrics[metrics$Dataset == "ME", ],
+                                           "GraphST_ari"))) +
+  scale_color_manual(values = colors) +
+  guides(colour = guide_legend(override.aes = list(size = 5))) +
+  labs(color = "GraphST") +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank(),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
 ```
+
+
 
 # Suppl Figs. 35
 
 ```{r}
-# reading computing performance metrics from benchmarking
-all_resources <- readRDS("./data_outputs/benchmarkOut/compute_metrics.Rds")
+# Multi-sample analysis with and without Harmony or spatial alignment
 
-all_resPlot <- all_resources %>%
-  ggplot(aes(x = Elapsed_Time_sec/3600, y = Peak_RAM_Used_MiB/1000, 
-             shape = Method, colour = avg_ari, size = Cells/1000)) +
-  geom_point() +
-  scale_color_continuous(low = "black", high = "red", 
-                         limits = c(min(all_resources$avg_ari),
-                                    max(all_resources$avg_ari))) +
-  scale_shape_manual(values = c("ClustSIGNAL" = 18, "Banksy" = 19, 
-                                "BASS" = 17, "SpatialPCA" = 15)) +
-  labs(x = "Run time (hr)", y = "Memory usage (Gb)", colour = "Mean ARI",
-       shape = "Method", size = "Cells \n(in thousands)") +
-  scale_size_continuous(range = c(3, 10)) + 
-  guides(shape = guide_legend(override.aes = list(size = 5))) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
 ```
 
 

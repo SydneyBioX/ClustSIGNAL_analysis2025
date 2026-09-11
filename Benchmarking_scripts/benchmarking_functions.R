@@ -23,35 +23,61 @@ runClustSIGNAL <- function(spe, samples, threads = 1, outputs = "a", hvgs = F,
 }
 
 
-
 runBANKSY <- function(spe, annots_label, sample_label, SEED, k_geom = c(15, 30), 
-                      batch = FALSE, batch_by = "None", lambda = 0.2, res = 1, 
-                      npcs = 20, use_agf = TRUE, compute_agf = TRUE){
-    
-    #### parameters
-    # spe - spe object containing raw counts
-    # annots_label - metadata column name containing annotation labels
-    # sample_label - metadata column name containing sample IDs
-    # batch - whether to perform batch correction
-    # batch_by - metadata column name containing batch groups
-    
+                      batch = F, batch_by = "None", lambda = 0.2, res = 1, 
+                      npcs = 20, use_agf = T, compute_agf = T, hvgs = F){
+    library(Banksy)
+    library(SpatialExperiment)
+    # library(Seurat)
+    library(harmony)
+    library(tidyr)
+    library(data.table)
     #### Banksy parameters
-    # compute_agf - TRUE computes both weighted neighborhood mean (H_0) and
+    # compute_agf = TRUE computes both weighted neighborhood mean (H_0) and
     #   the azimuthal Gabor filter (H_1).
-    # lambda - mixing parameter, ranges from 0-1. Smaller lambda for cell-typing 
-    #   mode (recommended value is 0.2)
-    # k_geom - numeric value or vector defining neighbourhood sizes of H_0 and 
-    #   H_1, respectively. Recommended values c(15, 30).
-    # res - Leiden clustering resolution. Higher value gives more clusters.
-    # SEED - to set.seed() for reproducibility.
-    # npcs - number of PCA dimensions to calculate. Default 20.
+    # use_agf = TRUE instructs algorithm to use the computed H_0 and H_1.
+    # lambda is mixing parameter, ranges from 0-1.
+    #   Smaller lambda for cell-typing mode (recommended value is 0.2),
+    #   Higher lambda for domain-finding mode (recommended value is 0.8).
+    #   Recommended lambda = 0.2 for visium data.
+    # k_geom is neighbourhood size.
+    #   k_geom = 6 corresponds to first-order neighbors in visium data,
+    #   whereas k_geom = 18 corresponds to first and second-order neighbors.
+    #   Recommended k_geom = 18 for Visium spots, and
+    #   and k_geom = c(15, 30) for other data.
+    # res is Leiden clustering resolution.
+    #   Higher value gives more clusters.
+    #   Used res = 0.55 for visium data.
+    # SEED to set.seed() for reproducibility
+    # npcs is the number of PCA dimensions to calculate
+    # hvgs instructs the R wrapper whether or not to calculate abd use HVGs.
+    #
+    #### Other parameters
+    # batch = TRUE indicates batch correction is required.
+    # batch_by - column name of patient/subject/group names to batch correct.
+    # annots_label is name of column in colData(spe) containing cell/spot
+    #   annotations.
+    # sample_label is name of column in colData(spe) conatining sample names.
     
-    if (batch == TRUE) {
-        show(paste("Multisample run with batch correction. Time", 
+    # selecting hvgs
+    if (hvgs == T & batch == T) {
+        gene_var <- scran::modelGeneVar(spe, block = batch_by)
+        hvg_genes <- scran::getTopHVGs(gene_var, n = 3000)
+        spe <- spe[hvg_genes, ]
+        show(paste("Highly variable genes selected consdering batch effects. Time", 
                    format(Sys.time(),'%H:%M:%S')))
-        colnames(spe) <- paste0(colnames(spe), "_", spe[[sample_label]])
-        
-        # Staggering spatial coordinates
+    } else if (hvgs == T & batch == F) {
+        gene_var <- scran::modelGeneVar(spe)
+        hvg_genes <- scran::getTopHVGs(gene_var, n = 3000)
+        spe <- spe[hvg_genes, ]
+        show(paste("Highly variable genes selected. Time", 
+                   format(Sys.time(),'%H:%M:%S')))
+    }
+    
+    colnames(spe) <- paste0(colnames(spe), "_", spe[[sample_label]])
+    
+    # Staggering spatial coordinates
+    if (length(unique(spe[[sample_label]])) > 1) {
         locs <- spatialCoords(spe)
         locs <- cbind(locs, sample = factor(spe[[sample_label]]))
         locs_dt <- data.table(locs)
@@ -64,27 +90,23 @@ runBANKSY <- function(spe, annots_label, sample_label, SEED, k_geom = c(15, 30),
         spatialCoords(spe) <- locs
         show(paste("Spatial coordinates of samples staggered. Time", 
                    format(Sys.time(),'%H:%M:%S')))
-        
-        # Following normalization approach in vignette
-        seu <- as.Seurat(spe, data = NULL)
-        # normalizing data
-        scale_factor <- median(colSums(assay(spe, "counts")))
-        seu <- NormalizeData(seu, scale.factor = scale_factor,
-                             normalization.method = "RC")
-        # Adding data to spe object
-        assay(spe, "normcounts") <- GetAssayData(seu)
-        show(paste("Seurat normalisation complete. Time",
-                   format(Sys.time(),'%H:%M:%S')))
-        
-        # Running BANKSY
-        show(paste("BANKSY run started. Time", 
-                   format(Sys.time(),'%H:%M:%S')))
-        spe <- computeBanksy(spe, assay_name = "normcounts",
-                             compute_agf = compute_agf, k_geom = k_geom)
-        spe <- runBanksyPCA(spe, use_agf = use_agf, lambda = lambda,
-                            npcs = npcs, seed = SEED)
-        # Harmony batch correction
-        PCA_label <- paste0("PCA_M", as.numeric(use_agf), "_lam", lambda)
+    }
+    
+    # data normalisation
+    spe <- scater::logNormCounts(spe)
+    show(paste("Normalisation complete. Time", format(Sys.time(),'%H:%M:%S')))
+    
+    #### Running BANKSY
+    show(paste("BANKSY run started. Time", 
+               format(Sys.time(),'%H:%M:%S')))
+    spe <- computeBanksy(spe, assay_name = "logcounts",
+                         compute_agf = compute_agf, k_geom = k_geom)
+    spe <- runBanksyPCA(spe, use_agf = use_agf, lambda = lambda,
+                        npcs = npcs, seed = SEED)
+    PCA_label <- paste0("PCA_M", as.numeric(use_agf), "_lam", lambda)
+    
+    # Harmony batch correction and clustering
+    if (batch == T) {
         set.seed(SEED)
         harmony_embedding <- RunHarmony(data_mat = reducedDim(spe, PCA_label),
                                         meta_data = colData(spe),
@@ -98,37 +120,9 @@ runBANKSY <- function(spe, annots_label, sample_label, SEED, k_geom = c(15, 30),
                              lambda = lambda, resolution = res, seed = SEED)
         show(paste("BANKSY clustering completed. Time", 
                    format(Sys.time(),'%H:%M:%S')))
-    }
-    else {
-        # Following normalization approach in vignette
-        # separating samples into individual spe objects
-        sample_names <- unique(spe[[sample_label]])
-        spe_list <- lapply(sample_names, function(x) spe[, spe[[sample_label]] == x])
-        # Seurat - normalizing data
-        seu_list <- lapply(spe_list, function(x) {
-            x_seu <- as.Seurat(x, data = NULL)
-            x_seu <- NormalizeData(x_seu, scale.factor = 5000,
-                                   normalization.method = "RC")
-            return(x_seu)})
-        # Adding data to spe object
-        spe_list <- Map(function(spe, seu) {
-            assay(spe, "normcounts") <- GetAssayData(seu)
-            spe},
-            spe_list, seu_list)
-        show(paste("Seurat normalisation complete. Time", 
-                   format(Sys.time(),'%H:%M:%S')))
-        
-        # Running BANKSY
-        show(paste("BANKSY run started. Time", 
-                   format(Sys.time(),'%H:%M:%S')))
-        spe_list <- lapply(spe_list, computeBanksy, assay_name = "normcounts",
-                           compute_agf = compute_agf, k_geom = k_geom)
-        # merging samples for downstream steps
-        spe <- do.call(cbind, spe_list)
-        spe <- runBanksyPCA(spe, use_agf = use_agf, lambda = lambda,
-                            group = sample_label, seed = SEED)
-        spe <- clusterBanksy(spe, use_agf = use_agf, lambda = lambda,
-                             resolution = res, seed = SEED)
+    } else {
+        spe <- clusterBanksy(spe, dimred = PCA_label, use_agf = use_agf,
+                             lambda = lambda, resolution = res, seed = SEED)
         show(paste("BANKSY clustering completed. Time", 
                    format(Sys.time(),'%H:%M:%S')))
     }
@@ -148,7 +142,7 @@ runBASS <- function(cntm, xym, C, R, batch = T) {
     BASS <- createBASSObject(cntm, xym, C, R, beta_method = "SW", 
                              init_method = "kmeans")
     # Data pre-processing
-    BASS <- BASS.preprocess(BASS, , doBatchCorrect = batch)
+    BASS <- BASS.preprocess(BASS, doBatchCorrect = batch)
     # Run BASS algorithm
     BASS <- BASS.run(BASS)
     # post-process posterior samples

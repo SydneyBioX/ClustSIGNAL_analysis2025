@@ -25,6 +25,12 @@ library(scater)
 library(ggplot2)
 library(circlize)
 library(ComplexHeatmap)
+
+library(org.Mm.eg.db)
+library(AnnotationDbi)
+library(clusterProfiler)
+
+library(slingshot)
 ```
 
 # Panels a-d - SeqFISH mouse embryo analysis
@@ -220,6 +226,59 @@ markerPlot_me <- summary_data %>%
 #### Panel d
 
 ```{r}
+#### Enrichment analysis of the brain clusters
+
+set.seed(567)
+
+# function for assessing and plotting enrichment
+enrich_plot <- function(sig_genes, path_num = 10) {
+  # sig_genes = names of significant DEGs
+  # path_num = number of pathways to plot
+  
+  go_enrich <- enrichGO(gene = sig_genes,
+                        OrgDb = org.Mm.eg.db,
+                        keyType = "SYMBOL",
+                        ont = "BP",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff  = 0.05,
+                        qvalueCutoff  = 0.05)
+  ova_plot <- ggplot(go_enrich[go_enrich$Count >= 5,][1:path_num,],
+                     aes(x = reorder(Description, p.adjust, decreasing = T),
+                         y = -log10(p.adjust), fill = p.adjust)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = Count), hjust = 0) +
+    coord_flip() +
+    scale_fill_gradient(low = "#4c956c", high = "#fefee3",
+                        name = "Adjusted\nP-value") +
+    labs(y = "-Log10(adjusted P-value)") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 10),
+          axis.title.x = element_text(size = 12),
+          axis.title.y = element_blank(),
+          legend.title = element_text(size = 12),
+          legend.text = element_text(size = 10),
+          legend.key.height = unit(0.3, "cm"))
+  return(ova_plot)
+}
+
+# plotting pathway enrichment
+plot_clust10 <- 
+  enrich_plot(rownames(markers[["10"]][markers[["10"]]$FDR < 0.05 & 
+                                         markers[["10"]]$summary.logFC > 0.2, ]),100)
+plot_clust4 <- 
+  enrich_plot(rownames(markers[["4"]][markers[["4"]]$FDR < 0.05 & 
+                                        markers[["4"]]$summary.logFC > 0.2, ]))
+plot_clust12 <- 
+  enrich_plot(rownames(markers[["12"]][markers[["12"]]$FDR < 0.05 & 
+                                         markers[["12"]]$summary.logFC > 0.2, ]))
+plot_clust13 <- 
+  enrich_plot(rownames(markers[["13"]][markers[["13"]]$FDR < 0.05 & 
+                                         markers[["13"]]$summary.logFC > 0.2, ]))
+```
+
+#### Panel e
+
+```{r}
 #### expression plots of brain region marker genes
 
 # removing genes that have more global expression
@@ -256,362 +315,36 @@ genes_plotList <- setNames(lapply(brainClust_genes, function(g) {
 gene_plot <- wrap_plots(genes_plotList, nrow = 1, guides = "collect")
 ```
 
-# Panels e-h - MERFISH mouse hypothalamus analysis
-
-## Neuron cluster analysis
-
-Dataset used for this analysis - mouse hypothalamus data with ClustSIGNAL 
-benchmarking output.
-
-```{r}
-# reading spe object with ClustSIGNAL clusters
-spe_mh <- readRDS("./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
-
-sample_labels <- c("8.-0.24", "7.-0.14", "12.0.21", "17.0.26")
-
-# clusters associated with inhibitory and excitatory neurons
-inhibitory_clusters <- c(8, 3, 4, 9)
-excitatory_clusters <- c(14, 11, 5)
-
-# colors
-inhib_colors <- setNames(c("#9DD84A", "#9e6762", "#E1C239", "#ff891c", "grey95"), 
-                         c(inhibitory_clusters, "Others"))
-excit_colors <- setNames(c("#532C8A", "#B51D8D", "#139992", "grey95"), 
-                         c(excitatory_clusters, "Others"))
-```
-
-#### Panel e
-
-```{r}
-#### Neuron spatial plots
-
-# sub-setting data for selected samples
-spe_mh_sub <- spe_mh[, spe_mh$samples %in% sample_labels]
-spe_mh_sub$samples <- factor(spe_mh_sub$samples, levels = sample_labels)
-
-# spatial plots highlighting Neuron cells
-annotToplot <- ifelse(
-  spe_mh_sub$Cell_class %in% c("Excitatory", "Inhibitory"),
-  as.character(spe_mh_sub$Cell_class), "Others")
-neuron_annot <- plotReducedDim(spe_mh_sub, dimred = "spatial", 
-                               color_by = I(annotToplot), point_size = 4, 
-                               point_alpha = 1, scattermore = TRUE) +
-  scale_color_manual(values = c("Others" = "grey95", "Excitatory" = "#0F4A9C",
-                                "Inhibitory" = "#ff891c")) +
-  facet_wrap(~spe_mh_sub$samples, scales = "free", ncol = 1) +
-  guides(colour = guide_legend(override.aes = list(size = 5))) +
-  labs(color = "Annotation") +
-  theme_classic() +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        axis.line = element_blank(),
-        strip.background = element_blank(),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-
-# spatial plots highlighting inhibitory neuron clusters
-clustToplot_inhib <- ifelse(spe_mh_sub$ClustSIGNAL %in% inhibitory_clusters, 
-                            spe_mh_sub$ClustSIGNAL, "Others")
-inhib_clust <- plotReducedDim(spe_mh_sub, dimred = "spatial", 
-                              color_by = I(clustToplot_inhib), point_size = 4, 
-                              point_alpha = 1, scattermore = TRUE) +
-  facet_wrap(~spe_mh_sub$samples, scales = "free", ncol = 1) +
-  scale_color_manual(values = inhib_colors) +
-  guides(colour = guide_legend(override.aes = list(size = 5))) +
-  labs(color = "Inhibitory\nclusters") +
-  theme_classic() +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        axis.line = element_blank(),
-        strip.background = element_blank(),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-
-# spatial plots highlighting excitatory neuron clusters
-clustToplot_excit <- ifelse(spe_mh_sub$ClustSIGNAL %in% excitatory_clusters, 
-                            spe_mh_sub$ClustSIGNAL, "Others")
-excit_clust <- plotReducedDim(spe_mh_sub, dimred = "spatial", 
-                              color_by = I(clustToplot_excit), point_size = 4, 
-                              point_alpha = 1, scattermore = TRUE) +
-  facet_wrap(~spe_mh_sub$samples, scales = "free", ncol = 1) +
-  scale_color_manual(values = excit_colors) +
-  guides(colour = guide_legend(override.aes = list(size = 5))) +
-  labs(color = "Excitatory\nclusters") +
-  theme_classic() +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        axis.line = element_blank(),
-        strip.background = element_blank(),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-
-# combining all neuron associated plots
-comb_neuron_plot <- neuron_annot + inhib_clust + excit_clust + 
-  plot_layout(guides = "collect") & theme(plot.margin = margin(0, 0, 0, 0))
-```
-
 #### Panel f
 
 ```{r}
-#### Composition of ClustSIGNAL clusters
+#### cluster-based pseudotime trajectory analysis
 
-# confusion matrix of cell annotations and ClustSIGNAL clusters
-cellMatrix <- as.matrix(table(spe_mh$Cell_class, spe_mh$ClustSIGNAL))
+color_pal <- setNames(c("#635547", "#8EC792", "#9e6762", "#FACB12", "#3F84AA", 
+                        "#0F4A9C", "#EF5A9D", "#C594BF", "#ff891c", "#B51D8D", 
+                        "#139992", "#65A83E", "#005579", "#8DB5CE", "#C9EBFB", 
+                        "#DFCDE4", "#532C8A", "#8870ad", "#cc7818", "#FBBE92", 
+                        "#EF4E22", "#f9decf"), 1:22)
 
-# normalising values by number of cells in a cluster
-cellMatrix_norm <- sweep(cellMatrix, 2, colSums(cellMatrix), FUN = "/")
+# subset top 20 PCs
+reducedDim(spe_me, "PCA_20") <- reducedDim(spe_me, "PCA")[, 1:20]
 
-# assigning color range for heatmap
-col_func <- colorRamp2(seq(min(cellMatrix_norm),
-                           max(cellMatrix_norm), length = 3),
-                       c("aliceblue", "#bb0c00", "darkred"))
+# run slingshot
+spe_me_sling <- slingshot(spe_me, clusterLabels = 'ClustSIGNAL', 
+                          reducedDim = 'PCA_20')
+spe_me_sling_new <- embedCurves(spe_me, "UMAP")
 
-# ordering clusters
-column_ord <- c(9, 4, 3, 8, 5, 11, 14, 6, 1, 10, 12, 15, 2, 7, 13) |>
-  as.character()
-comp_htmap_mh <- Heatmap(cellMatrix_norm, name = "Proportion of cluster cells",
-                         col = col_func,
-                         border_gp = grid::gpar(col = "black", lty = 2),
-                         rect_gp = grid::gpar(col = "white", lwd = 2),
-                         row_title = "Annotations",
-                         column_title = "Clusters",
-                         column_title_side = "bottom",
-                         column_order = column_ord,
-                         show_row_dend = FALSE,
-                         show_column_dend = FALSE,
-                         column_title_gp = gpar(fontsize = 14),
-                         row_names_gp = gpar(fontsize = 12),
-                         column_names_gp = gpar(fontsize = 12),
-                         heatmap_legend_param = list(
-                           title_gp = gpar(fontsize = 14),
-                           labels_gp = gpar(fontsize = 12),
-                           direction = "horizontal",
-                           title_position = "lefttop",
-                           legend_width = unit(3, "cm")))
-draw(comp_htmap_mh, heatmap_legend_side = "bottom")
+# generate UMAP with trajectory overlays
+umap_coords <- reducedDim(spe_me, "UMAP")
+cluster_colors <- color_pal[as.character(spe_me$ClustSIGNAL)]
+legend_colors <- color_pal[c(1:22)]
+
+plot(umap_coords, col = cluster_colors, pch = 16, cex = 0.4, axes = FALSE, 
+                xlab = "", ylab = "")
+lines(SlingshotDataSet(spe_me_sling_new), lwd = 0.5, type = 'curves', 
+      col = 'black', lty = 1)
+legend(x = "topright", inset = c(-0.25, 0), xpd = TRUE, legend = c(1:22), 
+       col = legend_colors, pch = 16, 
+       pt.cex = 1.2, cex = 0.8, bty = "n")
 ```
 
-#### Panel g
-
-```{r}
-#### top markers of neuron clusters
-
-# sub-setting data to Neuron clusters
-spe_mh_sub <- spe_mh[, spe_mh$ClustSIGNAL %in% c(inhibitory_clusters, 
-                                                 excitatory_clusters)]
-
-# identifying cluster markers
-markers <- findMarkers(spe_mh_sub, test.type = "t", 
-                       groups = as.character(spe_mh_sub$ClustSIGNAL))
-
-# plotting top 10 markers from each cluster
-top_mh_markers <- lapply(markers, function(x) {
-  imp_markers <- x[x$FDR < 0.05,]
-  return(rownames(imp_markers)[1:10])}) |> 
-  unlist() |> unique()
-
-# data frame of log normalised expression of top marker genes
-gexp_mh_marker <- logcounts(spe_mh_sub)[top_mh_markers, ] |> 
-  as.matrix() |> t() |> as.data.frame()
-# adding cluster label to expression data frame
-gexp_mh_marker$cluster <- factor(as.character(spe_mh_sub$ClustSIGNAL))
-gexp_mh_marker_melt <- reshape2::melt(gexp_mh_marker, id.vars = "cluster", 
-                                      variable.name = "gene", 
-                                      value.name = "expression")
-
-# summarizing data - mean gene expression in cluster and 
-# percentage of cluster cells in which gene is expressed
-summary_data <- gexp_mh_marker_melt %>%
-  group_by(cluster, gene) %>%
-  summarise(
-    meanExpression = mean(expression),
-    PerctageCells = sum(expression > 0) / n() * 100) %>%
-  mutate(cluster = factor(cluster, 
-                          levels = c(excitatory_clusters, inhibitory_clusters)),
-         group = ifelse(cluster %in% inhibitory_clusters, "Inhibitory", "Excitatory"),
-         group = factor(group, levels = c("Inhibitory", "Excitatory")))
-
-markerPlot_mh <- summary_data %>%
-  ggplot(aes(x = gene, y = cluster, size = PerctageCells, 
-             color = meanExpression)) +
-  geom_point() +
-  facet_grid(rows = vars(group), scales = "free_y", space = "free_y") +
-  scale_size_continuous(limit = c(0, 100), range = c(0, 5)) +
-  scale_color_gradient(low = "white", high = "darkblue") + 
-  labs(x = "Genes", y = "Clusters", color = "Average\nexpression", 
-       size = "Percentage\ncells\nexpressed") +
-  theme_classic() +
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12),
-        axis.text.x = element_text(angle = 90, hjust = 1),
-        strip.text = element_text(size = 14),
-        strip.background = element_blank(),
-        legend.title = element_text(size = 14),
-        legend.key.height = unit(0.5, "cm"),
-        legend.text = element_text(size = 12))
-```
-
-#### Panel h
-
-```{r}
-# reading ClustSIGNAL benchmarking result 
-res_mh <- readRDS("./data_outputs/benchmarkOut/res_mh_cSIGNAL.Rds")
-nnCells <- res_mh$neighbours # neighbourhood data from ClustSIGNAL run
-spe_mh <- res_mh$spe_final # spe object with ClustSIGNAL clusters
-names(spe_mh$ClustSIGNAL) <- colnames(spe_mh)
-
-# analysis: performed on 4 selected samples
-# in each sample, for each cell in a cluster, identify its 
-# 30 nearest neighbours and extract their cluster label information
-clusters <- sort(unique(spe_mh$ClustSIGNAL))
-coloc_matList <- setNames(lapply(sample_labels, function(samp) {
-  # sub-setting data to a sample
-  speX <- spe_mh[, spe_mh$samples == samp]
-  # sub-setting ClustSIGNAL neighbourhood data, excluding the cell itself
-  knn_out <- nnCells[speX$Cell_ID, 2:31] 
-  
-  # initialising matrix to calculate overall colocalisation in a sample
-  coloc_mat <- matrix(0, nrow = length(clusters), ncol = length(clusters),
-                      dimnames = list(clusters, clusters)) 
-  for (i in speX$Cell_ID) { # for each cell in a sample
-    source_cluster <- speX$ClustSIGNAL[i] # identify source cluster
-    neighbor_ids <- knn_out[i, ] # extract neighbouring cell IDs
-    neighbor_clusters <- speX$ClustSIGNAL[neighbor_ids] # extract neighbours' clusters
-    # count cells belonging to each cluster in a cell's neighbourhood
-    coloc_counts <- table(factor(neighbor_clusters, levels = clusters)) 
-    # add cluster counts to total
-    coloc_mat[source_cluster, ] <- coloc_mat[source_cluster, ] + coloc_counts 
-  }
-  return(coloc_mat)
-}), sample_labels)
-```
-
-```{r}
-#### colocalisation plots of neuron clusters
-
-# order of neighbouring clusters
-neighClust_ord <- c(9, 4, 3, 8, 5, 11, 14, 6, 1, 10, 12, 15, 2, 7, 13) |>
-  as.character()
-
-# order of neuron clusters
-neuron_clust_ord <- c(9, 4, 3, 8, 5, 11, 14)
-
-# setting color range for heatmaps
-col_func <- colorRamp2(seq(0, 1, length = 2), c("white", "red"))
-```
-
-```{r}
-#### Sample "8.-0.24"
-
-coloc_prop1 <- coloc_matList[["8.-0.24"]] / rowSums(coloc_matList[["8.-0.24"]])
-coloc_prop1 <- coloc_prop1[neuron_clust_ord, neighClust_ord]
-colocal_ht1 <- Heatmap(
-    coloc_prop1,
-    col = col_func,
-    na_col = "grey95",
-    cluster_columns = FALSE,
-    cluster_rows = FALSE,
-    border_gp = grid::gpar(col = "black", lty = 2, lwd = 1),
-    rect_gp = grid::gpar(col = "white", lwd = 1),
-    column_title_gp = gpar(fontsize = 14),
-    column_title = "Neighbouring clusters",
-    row_title = "Animal 8\nBregma -0.24",
-    row_title_gp = gpar(fontsize = 14),
-    row_names_side = "left",
-    row_names_gp = gpar(fontsize = 12),
-    column_names_gp = gpar(fontsize = 12),
-    column_names_side = "top",
-    show_heatmap_legend = FALSE)
-```
-
-```{r}
-#### Sample "7.-0.14"
-
-coloc_prop2 <- coloc_matList[["7.-0.14"]] / rowSums(coloc_matList[["7.-0.14"]])
-coloc_prop2 <- coloc_prop2[neuron_clust_ord, neighClust_ord]
-colocal_ht2 <- Heatmap(
-    coloc_prop2,
-    col = col_func,
-    na_col = "grey95",
-    cluster_columns = FALSE,
-    cluster_rows = FALSE,
-    border_gp = grid::gpar(col = "black", lty = 2, lwd = 1),
-    rect_gp = grid::gpar(col = "white", lwd = 1),
-    column_title_gp = gpar(fontsize = 14),
-    column_title = "Neighbouring clusters",
-    row_title = "Animal 7\nBregma -0.14",
-    row_title_gp = gpar(fontsize = 14),
-    row_names_side = "left",
-    row_names_gp = gpar(fontsize = 12),
-    column_names_gp = gpar(fontsize = 12),
-    column_names_side = "top",
-    show_heatmap_legend = FALSE)
-```
-
-```{r}
-#### sample "12.0.21"
-
-coloc_prop3 <- coloc_matList[["12.0.21"]] / rowSums(coloc_matList[["12.0.21"]])
-coloc_prop3 <- coloc_prop3[neuron_clust_ord, neighClust_ord]
-colocal_ht3 <- Heatmap(
-    coloc_prop3, name = "Proportion of neighbouring clusters",
-    col = col_func,
-    na_col = "grey95",
-    cluster_columns = FALSE,
-    cluster_rows = FALSE,
-    border_gp = grid::gpar(col = "black", lty = 2, lwd = 1),
-    rect_gp = grid::gpar(col = "white", lwd = 1),
-    column_title_gp = gpar(fontsize = 14),
-    column_title = "Neighbouring clusters",
-    row_title = "Animal 12\nBregma 0.21",
-    row_title_gp = gpar(fontsize = 14),
-    row_names_side = "left",
-    row_names_gp = gpar(fontsize = 12),
-    column_names_gp = gpar(fontsize = 12),
-    column_names_side = "top",
-    show_heatmap_legend = FALSE)
-```
-
-```{r}
-#### sample "17.0.26"
-
-coloc_prop4 <- coloc_matList[["17.0.26"]] / rowSums(coloc_matList[["17.0.26"]])
-coloc_prop4 <- coloc_prop4[neuron_clust_ord, neighClust_ord]
-colocal_ht4 <- Heatmap(
-    coloc_prop4, name = "Proportion of neighbouring clusters",
-    col = col_func,
-    na_col = "grey95",
-    cluster_columns = FALSE,
-    cluster_rows = FALSE,
-    border_gp = grid::gpar(col = "black", lty = 2, lwd = 1),
-    rect_gp = grid::gpar(col = "white", lwd = 1),
-    column_title_gp = gpar(fontsize = 14),
-    column_title = "Neighbouring clusters",
-    row_title = "Animal 17\nBregma 0.26",
-    row_title_gp = gpar(fontsize = 14),
-    row_names_side = "left",
-    row_names_gp = gpar(fontsize = 12),
-    column_names_gp = gpar(fontsize = 12),
-    column_names_side = "top",
-    show_heatmap_legend = FALSE)
-```
-
-```{r}
-# combining heatmaps
-legend <- Legend(
-  col_fun = col_func,
-  title = "Proportion of neighbouring clusters",
-  title_position = "topcenter",
-  direction = "horizontal",
-  legend_width = unit(5, "cm"),
-  title_gp = gpar(fontsize = 14),
-  labels_gp = gpar(fontsize = 12),
-  border = TRUE
-)
-
-ht_list <- colocal_ht1 %v% colocal_ht2 %v% colocal_ht3 %v% colocal_ht4
-draw(ht_list, heatmap_legend_list = list(legend), heatmap_legend_side = "bottom")
-```
