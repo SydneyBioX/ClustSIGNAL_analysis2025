@@ -934,11 +934,9 @@ me_graphst <- ggplot(clustDF_me, aes(x = x, y = -y, color = GraphST)) +
 # reading spe object with ClustSIGNAL clusters
 spe_me <- readRDS("./data_outputs/benchmarkOut/spe_me_cSIGNAL.Rds")
 
-guttube_clusters <- c(4, 14)
-
-neural_clusters <- c(20, 22)
-
-spinalcord_clusters <- c(3, 21)
+guttube_clusters <- c(17, 22)
+neuralcrest_clusters <- c(14, 21)
+spinalcord_clusters <- c(9, 19)
 ```
 
 ```{r}
@@ -1053,14 +1051,14 @@ crest_annot <- plotReducedDim(spe_me, dimred = "spatial",
         legend.title = element_text(size = 14))
 
 # spatial plots highlighting Neural crest clusters
-clustToplot <- ifelse(spe_me$ClustSIGNAL %in% neural_clusters, 
+clustToplot <- ifelse(spe_me$ClustSIGNAL %in% neuralcrest_clusters, 
                       spe_me$ClustSIGNAL, "Others")
 crest_clust <- plotReducedDim(spe_me, dimred = "spatial", 
                               color_by = I(clustToplot), point_size = 3, 
                               point_alpha = 1, scattermore = TRUE) +
   facet_wrap(~spe_me$embryo, scales = "free") +
   scale_color_manual(values = setNames(c("grey95", "#B51D8D", "#65A83E"), 
-                                       c("Others", neural_clusters))) +
+                                       c("Others", neuralcrest_clusters))) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
   labs(color = "Clusters") +
   theme_classic() +
@@ -1080,7 +1078,7 @@ comb_crest_plot <- crest_annot / crest_clust + plot_layout(guides = "collect")
 ```{r}
 #### panel d - top markers of Neural crest clusters
 
-spe_me_sub <- spe_me[, spe_me$ClustSIGNAL %in% neural_clusters]
+spe_me_sub <- spe_me[, spe_me$ClustSIGNAL %in% neuralcrest_clusters]
 markers <- findMarkers(spe_me_sub, test.type = "t", 
                        groups = as.character(spe_me_sub$ClustSIGNAL))
 
@@ -1118,7 +1116,7 @@ markerPlot_neural <- summary_data %>%
 ```
 
 ```{r}
-#### panel c - spatial plots of Spinal cord region and clusters
+#### panel e - spatial plots of Spinal cord region and clusters
 
 # spatial plots highlighting Spinal cord region
 annotToplot <- ifelse(spe_me$celltype_mapped_refined == "Spinal cord",
@@ -1161,10 +1159,13 @@ spinal_clust <- plotReducedDim(spe_me, dimred = "spatial",
         strip.background = element_blank(),
         legend.text = element_text(size = 12),
         legend.title = element_text(size = 14))
+
+# combining spatial plots
+comb_spinal_plot <- spinal_annot / spinal_clust + plot_layout(guides = "collect")
 ```
 
 ```{r}
-#### panel d - top markers of Spinal cord clusters
+#### panel f - top markers of Spinal cord clusters
 
 spe_me_sub <- spe_me[, spe_me$ClustSIGNAL %in% spinalcord_clusters]
 markers <- findMarkers(spe_me_sub, test.type = "t", 
@@ -1202,8 +1203,6 @@ markerPlot_spinal <- summary_data %>%
         legend.text = element_text(size = 12)) 
 ```
 
-
-
 # Suppl Figs. 37-38
 
 ```{r}
@@ -1211,28 +1210,28 @@ markerPlot_spinal <- summary_data %>%
 spe_mh <- readRDS("./data_outputs/benchmarkOut/spe_mh_cSIGNAL.Rds")
 
 # clusters associated with inhibitory and excitatory neurons
-inhibitory_clusters <- c(8, 3, 4, 9)
-excitatory_clusters <- c(14, 11, 5)
+inhibitory_clusters <- c(5, 6, 8)
+excitatory_clusters <- c(3, 10)
 
 # colors
-inhib_colors <- setNames(c("#9DD84A", "#9e6762", "#E1C239", "#ff891c", "grey95"), 
+inhib_colors <- setNames(c("#9DD84A", "#9e6762", "#ff891c", "grey95"), 
                          c(inhibitory_clusters, "Others"))
-excit_colors <- setNames(c("#532C8A", "#B51D8D", "#139992", "grey95"), 
+excit_colors <- setNames(c("#B51D8D", "#139992", "grey95"), 
                          c(excitatory_clusters, "Others"))
 ```
 
 ```{r}
-#### Suppl Fig. 16 - excitatory neurons
+#### Suppl Fig. 37 - inhibitory neurons 
 
-clustToplot_excit <- ifelse(spe_mh$ClustSIGNAL %in% excitatory_clusters, 
+clustToplot_inhib <- ifelse(spe_mh$ClustSIGNAL %in% inhibitory_clusters, 
                             spe_mh$ClustSIGNAL, "Others")
-excit_clust <- plotReducedDim(spe_mh, dimred = "spatial", 
-                              color_by = I(clustToplot_excit), point_size = 4, 
+inhib_clust <- plotReducedDim(spe_mh, dimred = "spatial", 
+                              color_by = I(clustToplot_inhib), point_size = 4, 
                               point_alpha = 1, scattermore = TRUE) +
   facet_wrap(~spe_mh$samples, scales = "free", ncol = 12) +
-  scale_color_manual(values = colors) +
+  scale_color_manual(values = inhib_colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
-  labs(color = "Excitatory\nclusters") +
+  labs(color = "Inhibitory\nclusters") +
   theme_classic() +
   theme(axis.text = element_blank(),
         axis.title = element_blank(),
@@ -1245,17 +1244,17 @@ excit_clust <- plotReducedDim(spe_mh, dimred = "spatial",
 ```
 
 ```{r}
-#### Suppl Fig. 16 - inhibitory neurons 
+#### Suppl Fig. 38 - excitatory neurons
 
-clustToplot_inhib <- ifelse(spe_mh$ClustSIGNAL %in% inhibitory_clusters, 
+clustToplot_excit <- ifelse(spe_mh$ClustSIGNAL %in% excitatory_clusters, 
                             spe_mh$ClustSIGNAL, "Others")
-inhib_clust <- plotReducedDim(spe_mh, dimred = "spatial", 
-                              color_by = I(clustToplot_inhib), point_size = 4, 
+excit_clust <- plotReducedDim(spe_mh, dimred = "spatial", 
+                              color_by = I(clustToplot_excit), point_size = 4, 
                               point_alpha = 1, scattermore = TRUE) +
   facet_wrap(~spe_mh$samples, scales = "free", ncol = 12) +
-  scale_color_manual(values = colors) +
+  scale_color_manual(values = excit_colors) +
   guides(colour = guide_legend(override.aes = list(size = 5))) +
-  labs(color = "Inhibitory\nclusters") +
+  labs(color = "Excitatory\nclusters") +
   theme_classic() +
   theme(axis.text = element_blank(),
         axis.title = element_blank(),
